@@ -49,9 +49,9 @@ def get_db():
     finally:
         db.close()
 
-print("Attempting direct database connection test...")
-try:
-    db_session = next(get_db())
-except Exception:
-    pass
-print("Done")
+# print("Attempting direct database connection test...")
+# try:
+#     db_session = next(get_db())
+# except Exception:
+#     pass
+# print("Done")
