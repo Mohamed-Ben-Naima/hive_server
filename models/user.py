@@ -1,11 +1,14 @@
 # Hive-server/models/user.py
 
-from sqlalchemy import Column, Integer, String, DateTime
+# IMPORTANT: JSONB is a PostgreSQL-specific type, so it's imported from its dialect.
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB # <-- FIX: Import JSONB from here!
 from sqlalchemy.sql import func
-from .base import Base # Relative import for Base from models.base
+from sqlalchemy.orm import relationship
+from .base import Base
 
 class User(Base):
-    __tablename__ = "users" # Maps to the "users" table in your PostgreSQL schema
+    __tablename__ = "users"
 
     user_id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
@@ -13,8 +16,26 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login = Column(DateTime(timezone=True), nullable=True)
 
-    # You can define relationships to other models (e.g., Profile) here later.
-    # Example: profiles = relationship("Profile", back_populates="user")
+    profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User(user_id={self.user_id}, email='{self.email}')>"
+
+class Profile(Base):
+    __tablename__ = "profiles"
+
+    profile_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), unique=True, nullable=False)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    gender = Column(String(50), nullable=True)
+    avatar_url = Column(String(255), nullable=True)
+    bio = Column(Text, nullable=True)
+    social_links = Column(JSONB, nullable=True) # This is where JSONB is used
+    trading_style = Column(String(100), nullable=True) # This was missing in the previous Profile model but is in your SQL schema
+
+    user = relationship("User", back_populates="profile")
+
+    def __repr__(self):
+        return f"<Profile(profile_id={self.profile_id}, username='{self.username}')>"
