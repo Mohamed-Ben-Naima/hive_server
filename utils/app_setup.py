@@ -4,68 +4,83 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy.orm import Session # For type hinting in lifespan
-from sqlalchemy import text # For database connection test
-import traceback # For logging unhandled exceptions
-import os # For environment variables
-from dotenv import load_dotenv # For loading .env
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+import traceback
+import os
+from dotenv import load_dotenv
+import logging # <-- NEW: Import logging
 
 # Load environment variables here as well, to ensure they are available
-# when this module is imported, especially if other modules depend on them early.
 load_dotenv()
 
-# --- Application Settings (moved here from main.py) ---
-APP_NAME = "Tea & Hive Backend"
+# --- Configure Logger ---
+# Create a logger instance
+logger = logging.getLogger("trader_hive_logger") # Give your logger a name
+logger.setLevel(logging.INFO) # Set the default logging level
+
+# Create a console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO) # Set handler level
+
+# Create a formatter (e.g., including timestamp, log level, logger name, and message)
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+console_handler.setFormatter(formatter)
+
+# Add the handler to the logger
+if not logger.handlers: # Prevent adding multiple handlers if reloaded
+    logger.addHandler(console_handler)
+
+# If DEBUG_MODE is true, set logger to DEBUG level
+if os.getenv("DEBUG_MODE", "False").lower() == "true":
+    logger.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.DEBUG) # Ensure handler also logs debug messages
+    logger.debug("DEBUG_MODE is ON. Logging level set to DEBUG.")
+
+
+# --- Application Settings ---
+APP_NAME = "Trader Hive Backend"
 APP_VERSION = "0.1.0"
-DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
+DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true" # Keep this for other logic if needed
 SECRET_KEY = os.getenv("SECRET_KEY", "default-super-secret-key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# CORS settings (moved here from main.py)
-CORS_ORIGINS = ["*"] # IMPORTANT: Restrict this in production (e.g., ["http://localhost:3000", "https://yourdomain.com"])
+# CORS settings
+CORS_ORIGINS = ["*"]
 CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 CORS_HEADERS = ["*"]
 
 # Import database utilities (relative to utils package)
-from .db import test_db_connection, engine # 'engine' is needed if Base.metadata.create_all is used
-from ..models.base import Base # Import Base for optional table creation
+from .db import test_db_connection, engine
+from ..models.base import Base
 
 # --- Lifespan Context Manager ---
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
-    """
-    FastAPI lifespan context manager for startup and shutdown events.
-    Handles database connection testing and optional table creation.
-    """
-    print(f"\n🚀 Starting {APP_NAME} v{APP_VERSION} 🚀")
-    print("Attempting database connection test on server startup...")
+    logger.info(f"🚀 Starting {APP_NAME} v{APP_VERSION} 🚀")
+    logger.info("Attempting database connection test on server startup...")
 
     if test_db_connection():
-        print("✅ Database connection successful on startup! ✅")
-        # --- Optional: Database Table Creation (for development only) ---
-        # In a production environment, you would use a migration tool like Alembic
-        # to manage your database schema changes. Uncomment the following lines
-        # ONLY for initial development setup if you want FastAPI to create tables.
-        # Base.metadata.create_all(bind=engine)
-        # print("Database tables ensured (development mode).")
+        logger.info("✅ Database connection successful on startup! ✅")
+        # Optional: Database Table Creation (for development only)
+        # if DEBUG_MODE: # Only create tables in debug mode for safety
+        #     Base.metadata.create_all(bind=engine)
+        #     logger.info("Database tables ensured (development mode).")
     else:
-        print("❌ Database connection FAILED on startup. Exiting application. ❌")
-        # If the database connection is critical, exit the application.
+        logger.critical("❌ Database connection FAILED on startup. Exiting application. ❌")
         import sys
         sys.exit(1)
 
-    yield # The application starts here
+    yield
 
-    # Shutdown event logic
-    print("\nShutting down FastAPI application.")
+    logger.info("Shutting down FastAPI application.")
 
 # --- Middleware Setup Function ---
 def setup_app_middleware(app: FastAPI):
-    """
-    Configures and adds CORS (Cross-Origin Resource Sharing) middleware to the FastAPI application.
-    """
-    from starlette.middleware.cors import CORSMiddleware # Imported locally to keep this file cleaner
+    from starlette.middleware.cors import CORSMiddleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
@@ -73,17 +88,14 @@ def setup_app_middleware(app: FastAPI):
         allow_methods=CORS_METHODS,
         allow_headers=CORS_HEADERS,
     )
+    logger.info("CORS middleware configured.")
+
 
 # --- Global Exception Handlers Setup Function ---
 def setup_exception_handlers(app: FastAPI):
-    """
-    Registers global exception handlers for the FastAPI application.
-    """
-    # Handler for Pydantic's RequestValidationError (for invalid request bodies/queries/paths)
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        print(f"Request Validation Error caught for URL: {request.url}")
-        print(f"Validation errors: {exc.errors()}")
+        logger.warning(f"Request Validation Error for URL: {request.url}. Details: {exc.errors()}")
 
         error_messages = []
         for error in exc.errors():
@@ -96,22 +108,21 @@ def setup_exception_handlers(app: FastAPI):
             content={"message": "Validation error", "details": error_messages},
         )
 
-    # Handler for FastAPI's HTTPException (e.g., 404 Not Found, 400 Bad Request)
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
-        print(f"HTTP Exception caught: {exc.status_code} - {exc.detail}")
+        logger.warning(f"HTTP Exception caught: {exc.status_code} - {exc.detail}")
         return JSONResponse(
             status_code=exc.status_code,
             content={"message": exc.detail},
         )
 
-    # Handler for any other unexpected exceptions (generic server errors)
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
-        print(f"Unhandled Exception caught: {exc}")
-        traceback.print_exc() # Prints the full traceback to the console/logs
+        # Log the full traceback for unhandled exceptions
+        logger.exception(f"Unhandled Exception caught for URL: {request.url}. Error: {exc}") # logger.exception logs traceback automatically
 
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"message": "An unexpected server error occurred."},
         )
+    logger.info("Global exception handlers registered.")
