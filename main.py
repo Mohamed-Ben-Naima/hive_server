@@ -16,7 +16,7 @@ from .schemas import user as user_schema # For test_error_endpoint if it remains
 # Initialize FastAPI application
 app = FastAPI(
     title=APP_NAME,
-    description="API for Trader Hive mobile application.",
+    description="API for Tea & Hive mobile application.",
     version=APP_VERSION,
     lifespan=app_lifespan # Register the lifespan context manager
 )
@@ -33,7 +33,7 @@ app.include_router(auth_router.router)
 # --- Root Endpoint ---
 @app.get("/", summary="Root endpoint", description="Returns a welcome message.")
 def read_root():
-    return {"message": "Welcome to Trader Hive Backend!"}
+    return {"message": "Welcome to Tea & Hive Backend 🍯!"}
 
 # --- Test Database Endpoint (for quick verification) ---
 @app.get("/test-db-endpoint/", summary="Test database connection", description="Verifies the database connection by requesting a session.")
