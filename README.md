@@ -1,5 +1,5 @@
-Trader Hive Backend Server
-Welcome to the backend server for the Trader Hive application!
+Tea & Hive Backend Server
+Welcome to the backend server for the Tea & Hive application!
 This project is built with FastAPI and provides a robust, scalable, and secure API for managing core functionalities like user authentication and profiles.
 
 🌟 Key Features
