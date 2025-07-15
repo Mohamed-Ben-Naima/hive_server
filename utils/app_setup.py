@@ -16,7 +16,7 @@ load_dotenv()
 
 # --- Configure Logger ---
 # Create a logger instance
-logger = logging.getLogger("trader_hive_logger") # Give your logger a name
+logger = logging.getLogger("tea_n_hive_logger") # Give your logger a name
 logger.setLevel(logging.INFO) # Set the default logging level
 
 # Create a console handler
@@ -40,18 +40,18 @@ if os.getenv("DEBUG_MODE", "False").lower() == "true":
     logger.debug("DEBUG_MODE is ON. Logging level set to DEBUG.")
 
 
-# --- Application Settings ---
-APP_NAME = "Trader Hive Backend"
-APP_VERSION = "0.1.0"
-DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true" # Keep this for other logic if needed
-SECRET_KEY = os.getenv("SECRET_KEY", "default-super-secret-key")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# --- Application Settings (Centralized here) ---
+APP_NAME = "Tea & Hive Backend" # Corrected App Name
+APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
+DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
+SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
-# CORS settings
-CORS_ORIGINS = ["*"]
-CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-CORS_HEADERS = ["*"]
+CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", "*")
+CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(',') if origin.strip()] if CORS_ORIGINS_STR != "*" else ["*"]
+CORS_METHODS = os.getenv("CORS_METHODS", "GET,POST,PUT,DELETE,OPTIONS").split(',')
+CORS_HEADERS = os.getenv("CORS_HEADERS", "*").split(',')
 
 # Import database utilities (relative to utils package)
 from .db import test_db_connection, engine

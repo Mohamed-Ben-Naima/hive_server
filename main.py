@@ -1,31 +1,45 @@
 # Hive-server/main.py
 
 from fastapi import FastAPI, Depends
-from sqlalchemy.orm import Session # For type hinting in test_db_endpoint
-from dotenv import load_dotenv # <-- Keep load_dotenv here for initial env loading
+from sqlalchemy.orm import Session
+from dotenv import load_dotenv # Keep load_dotenv here for initial env loading
 
 # Load environment variables at the very top of the main entry file
 load_dotenv()
 
-# Import app setup utilities from utils
-from .utils.app_setup import app_lifespan, setup_app_middleware, setup_exception_handlers, APP_NAME, APP_VERSION # <-- NEW IMPORTS
-from .utils.db import get_db # Database session dependency
-from .routers import auth as auth_router # Authentication router
-from .schemas import user as user_schema # For test_error_endpoint if it remains
+# Import all app setup utilities and settings from app_setup
+from .utils.app_setup import (
+    app_lifespan,
+    setup_app_middleware,
+    setup_exception_handlers,
+    APP_NAME,
+    APP_VERSION,
+    DEBUG_MODE,
+    SECRET_KEY,
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    CORS_ORIGINS,
+    CORS_METHODS,
+    CORS_HEADERS
+)
+from .utils.db import get_db
+from .routers import auth as auth_router
+from .routers import users as users_router # Import users router
+from .schemas import user as user_schema # For test_error_endpoint
 
 # Initialize FastAPI application
 app = FastAPI(
     title=APP_NAME,
     description="API for Tea & Hive mobile application.",
     version=APP_VERSION,
-    lifespan=app_lifespan # Register the lifespan context manager
+    lifespan=app_lifespan
 )
 
 # --- Apply Middlewares ---
-setup_app_middleware(app) # Call the middleware setup function
+setup_app_middleware(app)
 
 # --- Register Global Exception Handlers ---
-setup_exception_handlers(app) # Call the exception handlers setup function
+setup_exception_handlers(app)
 
 # --- Include Routers ---
 app.include_router(auth_router.router)
@@ -47,16 +61,15 @@ def test_db_endpoint(db: Session = Depends(get_db)):
 def test_error_endpoint(error_type: str):
     from fastapi import HTTPException, status
     from fastapi.exceptions import RequestValidationError
-    from pydantic import ValidationError # Imported locally for this specific test endpoint
+    from pydantic import ValidationError
 
     if error_type == "http":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This is a test HTTP error (Bad Request).")
     elif error_type == "generic":
-        result = 1 / 0 # ZeroDivisionError
+        result = 1 / 0
         return {"result": result}
     elif error_type == "validation":
         try:
-            # Simulate a validation error
             user_schema.UserCreate(email="invalid", password="1", verify_password="1")
         except ValidationError as e:
             raise RequestValidationError(e.errors())
@@ -64,9 +77,10 @@ def test_error_endpoint(error_type: str):
         return {"message": "Specify 'http', 'generic', or 'validation' to test errors."}
 
 # --- How to Run ---
-# 1. Ensure you are in the 'Hive-server' directory in your terminal.
-# 2. Make sure your .env file is correctly configured.
-# 3. Run the FastAPI application using uvicorn:
-#    uvicorn main:app --reload
+# IMPORTANT: You must run from the PARENT directory of 'Hive-server' (e.g., 'Hive-app/')
+# 1. Ensure your virtual environment is activated.
+# 2. Make sure your .env file is correctly configured inside 'Hive-server/'.
+# 3. From the 'Hive-app/' directory, run the FastAPI application using uvicorn:
+#    uvicorn Hive-server.main:app --reload
 #    OR, if you have fastapi-cli installed:
-#    fastapi dev main.py
+#    fastapi dev Hive-server/main.py

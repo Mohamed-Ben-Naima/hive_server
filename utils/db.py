@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import logging # <-- NEW: Import logging
 
 # Get logger instance for this module
-logger = logging.getLogger("trader_hive_logger.db") # Use a sub-logger for clarity
+logger = logging.getLogger("tea_n_hive_logger.db") # Use a sub-logger for clarity
 
 load_dotenv()
 

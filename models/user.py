@@ -1,11 +1,10 @@
 # Hive-server/models/user.py
 
-# IMPORTANT: JSONB is a PostgreSQL-specific type, so it's imported from its dialect.
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
-from sqlalchemy.dialects.postgresql import JSONB # <-- FIX: Import JSONB from here!
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from .base import Base
+from .base import Base # Relative import within the models package
 
 class User(Base):
     __tablename__ = "users"
@@ -16,6 +15,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login = Column(DateTime(timezone=True), nullable=True)
 
+    # One-to-one relationship with Profile
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -32,9 +32,10 @@ class Profile(Base):
     gender = Column(String(50), nullable=True)
     avatar_url = Column(String(255), nullable=True)
     bio = Column(Text, nullable=True)
-    social_links = Column(JSONB, nullable=True) # This is where JSONB is used
-    trading_style = Column(String(100), nullable=True) # This was missing in the previous Profile model but is in your SQL schema
+    trading_style = Column(String(100), nullable=True)
+    social_links = Column(JSONB, nullable=True)
 
+    # One-to-one relationship with User
     user = relationship("User", back_populates="profile")
 
     def __repr__(self):

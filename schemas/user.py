@@ -131,3 +131,20 @@ class UserWithProfileResponse(UserResponse):
                 }
             ]
         }
+
+class UserForTokenResponse(BaseModel):
+    user_id: int = Field(..., example=1)
+    email: EmailStr = Field(..., example="user@example.com")
+    username: str = Field(..., example="TraderBee") # Include username if available
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "examples": [
+                {
+                    "user_id": 1,
+                    "email": "user@example.com",
+                    "username": "TraderBee",
+                }
+            ]
+        }
