@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from typing import Optional
 import logging
+from datetime import datetime 
 
 logger = logging.getLogger("tea_n_hive_logger.user_service") # Corrected logger name
 
@@ -91,3 +92,16 @@ class UserService:
         
         logger.info(f"User {email_or_username} authenticated successfully.")
         return user
+    
+    # <--- NEW: Method to update last_login timestamp ---
+    def update_user_last_login(self, user: user_model.User):
+        """Updates the last_login timestamp for a given user."""
+        try:
+            user.last_login = datetime.utcnow() # Set to current UTC time
+            self.db.add(user) # Add to session (or merge if detached)
+            self.db.commit() # Commit the change
+            self.db.refresh(user) # Refresh the user object to reflect changes
+            logger.debug(f"Updated last_login for user ID: {user.user_id}, Email: {user.email}")
+        except Exception as e:
+            self.db.rollback()
+            logger.exception(f"Failed to update last_login for user ID: {user.user_id}. Rolling back.")

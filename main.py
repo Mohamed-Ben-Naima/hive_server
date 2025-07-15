@@ -43,6 +43,7 @@ setup_exception_handlers(app)
 
 # --- Include Routers ---
 app.include_router(auth_router.router)
+app.include_router(users_router.router) # <--- NEW: Include users router
 
 # --- Root Endpoint ---
 @app.get("/", summary="Root endpoint", description="Returns a welcome message.")

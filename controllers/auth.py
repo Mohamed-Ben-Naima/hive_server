@@ -57,6 +57,10 @@ def login_for_access_token_controller(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # <--- NEW: Update last_login timestamp after successful authentication ---
+    user_service.update_user_last_login(user)
+    # --- END NEW ---
+    
     # Ensure the user object has a profile and extract username
     # This assumes that for an authenticated user, a profile will always exist.
     # If a profile might not exist, you'd need to handle user.profile being None.
