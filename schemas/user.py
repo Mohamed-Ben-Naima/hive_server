@@ -148,3 +148,40 @@ class UserForTokenResponse(BaseModel):
                 }
             ]
         }
+
+class ProfileUpdate(BaseModel):
+    # All fields are Optional for PATCH requests
+    username: Optional[str] = Field(None, min_length=3, max_length=50, example="UpdatedTraderBee", description="New unique username for the user's profile.")
+    first_name: Optional[str] = Field(None, max_length=100, example="Jane", description="User's first name.")
+    last_name: Optional[str] = Field(None, max_length=100, example="Smith", description="User's last name.")
+    gender: Optional[str] = Field(None, max_length=20, example="Female", description="User's gender.")
+    avatar_url: Optional[str] = Field(None, example="https://new-avatar.com/image.png", description="URL to the user's new avatar image.")
+    bio: Optional[str] = Field(None, max_length=500, example="Passionate day trader focusing on crypto.", description="A short biography about the user.")
+    trading_style: Optional[str] = Field(None, max_length=100, example="Day Trading", description="User's preferred trading style.")
+    social_links: Optional[dict] = Field(None, example={"twitter": "janesmith_trade", "instagram": "janesmith.trading"}, description="A dictionary of social media links.")
+
+    @field_validator('username')
+    @classmethod
+    def validate_username_update(cls, value):
+        if value is not None: # Only validate if a value is provided
+            if not value.strip():
+                raise ValueError("Username cannot be empty or just spaces.")
+            if " " in value:
+                raise ValueError("Username cannot contain spaces.")
+        return value.strip() if value else value # Strip spaces if not None
+
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "username": "NewTraderName",
+                    "bio": "Updated bio for my profile.",
+                    "trading_style": "Swing Trading"
+                },
+                {
+                    "first_name": "Alice",
+                    "last_name": "Wonder",
+                    "gender": "Female"
+                }
+            ]
+        }
