@@ -10,7 +10,7 @@ from typing import Annotated # For cleaner dependency injection type hints
 
 # --- Internal Project Imports ---
 from ..utils.db import get_db
-from ..schemas.user import UserWithProfileResponse, ProfileUpdate # For response model
+from ..schemas.user import UserWithProfileResponse, ProfileUpdate, PasswordChange # For response model
 from ..models.user import User as UserModel # Your SQLAlchemy User model
 from ..services.user import UserService # To interact with user data
 
@@ -48,7 +48,6 @@ def get_current_user_profile_controller(
         )
 
 # Add other user-related controller functions here as needed (e.g., update_user_profile)
-# <--- NEW: Controller for updating current user's profile ---
 def update_user_profile_controller(
     current_user: Annotated[UserModel, Depends()], # The authenticated user whose profile will be updated
     profile_data: ProfileUpdate, # The partial update data from the request body
@@ -76,4 +75,31 @@ def update_user_profile_controller(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update profile due to a server error: {e}"
+        )
+    
+# <--- NEW: Controller for changing user's password ---
+def change_user_password_controller(
+    current_user: Annotated[UserModel, Depends()], # The authenticated user
+    password_data: PasswordChange, # The password change data from the request body
+    db: Session = Depends(get_db)
+) -> dict: # We'll return a simple success message
+    """
+    Controller function to change the password of the currently authenticated user.
+    """
+    logger.info(f"Received password change request for user: {current_user.email} (ID: {current_user.user_id})")
+
+    user_service = UserService(db)
+    try:
+        # Call the UserService method to perform the password change
+        user_service.change_password(user=current_user, password_data=password_data)
+        
+        logger.info(f"Password for user {current_user.email} changed successfully.")
+        return {"message": "Password changed successfully!"}
+    except HTTPException: # Re-raise HTTPExceptions (e.g., 401 Invalid current password)
+        raise
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred during password change for user {current_user.user_id}.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to change password due to a server error: {e}"
         )

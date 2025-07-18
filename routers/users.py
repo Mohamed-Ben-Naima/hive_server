@@ -12,7 +12,7 @@ from typing import Annotated # For cleaner dependency injection type hints
 # --- Internal Project Imports ---
 from ..utils.db import get_db # For dependency injection
 from ..utils.security import get_current_user # The key dependency for authentication
-from ..schemas.user import UserWithProfileResponse, ProfileUpdate # For response model
+from ..schemas.user import UserWithProfileResponse, ProfileUpdate, PasswordChange # For response model
 from ..controllers import user as user_controller # Import the user controller
 from ..models.user import User as UserModel # Your SQLAlchemy User model for type hinting
 
@@ -45,7 +45,6 @@ async def read_current_user_profile(
     return user_controller.get_current_user_profile_controller(current_user=current_user, db=db)
 
 # Add other user-related router endpoints here as needed (e.g., PUT /users/me for updates)
-# <--- NEW: PATCH endpoint for updating current user's profile ---
 @router.patch(
     "/me/update",
     response_model=UserWithProfileResponse,
@@ -66,5 +65,29 @@ async def update_current_user_profile(
     return user_controller.update_user_profile_controller(
         current_user=current_user,
         profile_data=profile_data,
+        db=db
+    )
+
+# <--- NEW: POST endpoint for changing user's password ---
+@router.post(
+    "/me/password",
+    response_model=dict, # Returns a simple message
+    summary="Change current user's password",
+    description="Allows an authenticated user to change their password. Requires the current password for verification.",
+)
+async def change_user_password(
+    current_user: Annotated[UserModel, Depends(get_current_user)], # Authenticated user
+    password_data: PasswordChange, # Request body for password change
+    db: Session = Depends(get_db) # Database session
+):
+    """
+    API endpoint to change the current authenticated user's password.
+    Requires a valid JWT access token in the Authorization header.
+    The request body must include the current password and the new password (with confirmation).
+    """
+    # Delegate the password change logic to the user controller
+    return user_controller.change_user_password_controller(
+        current_user=current_user,
+        password_data=password_data,
         db=db
     )

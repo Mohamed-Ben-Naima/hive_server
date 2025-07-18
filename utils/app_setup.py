@@ -42,7 +42,7 @@ if os.getenv("DEBUG_MODE", "False").lower() == "true":
 
 # --- Application Settings (Centralized here) ---
 APP_NAME = "Tea & Hive Backend" # Corrected App Name
-APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
+APP_VERSION = os.getenv("APP_VERSION", "0.6.0")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")

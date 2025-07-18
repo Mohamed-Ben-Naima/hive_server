@@ -32,11 +32,16 @@ router = APIRouter(
     summary="Register a new user",
     description="Creates a new user account with email, username, and password, and initializes their profile."
 )
-def register(
-    user_data: user_schema.UserCreate,
-    response: user_schema.UserWithProfileResponse = Depends(auth_controller.register_user_controller)
+async def register( # Changed to async as controllers might be async, or just good practice
+    user_data: user_schema.UserCreate, # Direct request body parameter
+    db: Session = Depends(get_db) # Direct dependency injection for the database session
 ):
-    return response
+    """
+    API endpoint for user registration.
+    Delegates the registration logic to the auth_controller.
+    """
+    # Explicitly call the controller and pass necessary arguments
+    return auth_controller.register_user_controller(user_data=user_data, db=db)
 
 @router.post(
     "/token",
@@ -45,13 +50,13 @@ def register(
     description="Authenticates a user with email/username and password, returning a JWT access token."
 )
 # The login endpoint now delegates all logic to login_for_access_token_controller
-async def login_for_access_token(
-    # Pass the form_data and db session directly to the controller
-    # The controller itself is a dependency that returns the Token
-    response: Token = Depends(auth_controller.login_for_access_token_controller)
+async def login_for_access_token( # Changed to async
+    form_data: OAuth2PasswordRequestForm = Depends(), # Direct request form data parameter
+    db: Session = Depends(get_db) # Direct dependency injection for the database session
 ):
     """
     API endpoint for user login.
     Delegates the authentication and token generation logic to the auth_controller.
     """
-    return response
+    # Explicitly call the controller and pass necessary arguments
+    return auth_controller.login_for_access_token_controller(form_data=form_data, db=db)

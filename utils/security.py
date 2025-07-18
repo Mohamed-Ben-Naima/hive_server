@@ -2,7 +2,7 @@
 
 # --- Standard Library Imports ---
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Annotated # Add Annotated for consistency
 import os
 import logging
 
@@ -11,20 +11,18 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session # For type hinting in get_current_user
+from sqlalchemy.orm import Session
 
 # --- Internal Project Imports ---
-# These can be imported at the top because they don't create circular dependencies
-from ..models.user import User # User model for type hinting
-from ..schemas.auth import TokenData # Schema for JWT payload
-from ..utils.db import get_db # Database session dependency
-
+from ..models.user import User as UserModel # <--- CHANGED: Import as UserModel for consistency
+from ..schemas.auth import TokenData
+from ..utils.db import get_db
+from ..utils.app_setup import ACCESS_TOKEN_EXPIRE_MINUTES # <--- IMPORTANT: Rely solely on this import
 
 # Get logger instance for this module
 logger = logging.getLogger("tea_n_hive_logger.security")
 
 # --- Password Hashing ---
-# Use bcrypt algorithm for hashing passwords
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -36,12 +34,10 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 # --- JWT Configuration ---
-# Retrieve SECRET_KEY and ALGORITHM from environment variables
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
-# Define the access token expiration time in minutes
-ACCESS_TOKEN_EXPIRE_MINUTES = 30 # <--- ADD THIS LINE
+# Removed: ACCESS_TOKEN_EXPIRE_MINUTES = 30 # <--- REMOVED: Now imported from app_setup
 
 # Define the OAuth2PasswordBearer scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
@@ -59,7 +55,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        # Use the global ACCESS_TOKEN_EXPIRE_MINUTES if no specific delta is provided
+        # Use the global ACCESS_TOKEN_EXPIRE_MINUTES imported from app_setup
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES) 
 
     to_encode.update({"exp": expire})
@@ -84,9 +80,9 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    token: Annotated[str, Depends(oauth2_scheme)], # Added Annotated for consistency
     db: Session = Depends(get_db)
-) -> User:
+) -> UserModel: # <--- CHANGED: Use UserModel for consistency
     """
     FastAPI dependency to get the current authenticated user from a JWT.
     Raises HTTPException if token is invalid or user not found.
@@ -116,7 +112,6 @@ async def get_current_user(
         raise credentials_exception
 
     # IMPORTANT: UserService must be imported here to avoid circular dependency
-    # because UserService imports security.py
     from ..services.user import UserService
     
     user_service = UserService(db)

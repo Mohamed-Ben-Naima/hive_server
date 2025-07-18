@@ -160,3 +160,38 @@ class UserService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to update profile due to a server error: {e}"
             )
+        
+    # <--- NEW: Method to change user's password ---
+    def change_password(self, user: user_model.User, password_data: user_schema.PasswordChange) -> user_model.User:
+        """
+        Changes the password for the given user after verifying the current password.
+        """
+        logger.info(f"Attempting to change password for user ID: {user.user_id}, Email: {user.email}")
+
+        # 1. Verify the current password
+        if not security.verify_password(password_data.current_password, user.password_hash):
+            logger.warning(f"Password change failed for user ID: {user.user_id}. Invalid current password provided.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, # Use 401 for invalid credentials
+                detail="Invalid current password."
+            )
+
+        # 2. Hash the new password
+        new_hashed_password = security.get_password_hash(password_data.new_password)
+
+        try:
+            # 3. Update the user's password hash
+            user.password_hash = new_hashed_password
+            self.db.add(user) # Add to session (or merge if detached)
+            self.db.commit() # Commit the change
+            self.db.refresh(user) # Refresh the user object to reflect changes
+
+            logger.info(f"Successfully changed password for user ID: {user.user_id}, Email: {user.email}.")
+            return user
+        except Exception as e:
+            self.db.rollback()
+            logger.exception(f"Error changing password for user ID: {user.user_id}. Rolling back transaction.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to change password due to a server error: {e}"
+            )

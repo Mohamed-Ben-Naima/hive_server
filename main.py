@@ -15,16 +15,16 @@ from .utils.app_setup import (
     APP_NAME,
     APP_VERSION,
     DEBUG_MODE,
-    SECRET_KEY,
-    ALGORITHM,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
+    SECRET_KEY, # Will be loaded by app_setup
+    ALGORITHM, # Will be loaded by app_setup
+    ACCESS_TOKEN_EXPIRE_MINUTES, # Will be loaded by app_setup
     CORS_ORIGINS,
     CORS_METHODS,
     CORS_HEADERS
 )
 from .utils.db import get_db
 from .routers import auth as auth_router
-from .routers import users as users_router # Import users router
+from .routers import users as users_router
 from .schemas import user as user_schema # For test_error_endpoint
 
 # Initialize FastAPI application
@@ -43,7 +43,7 @@ setup_exception_handlers(app)
 
 # --- Include Routers ---
 app.include_router(auth_router.router)
-app.include_router(users_router.router) # <--- NEW: Include users router
+app.include_router(users_router.router)
 
 # --- Root Endpoint ---
 @app.get("/", summary="Root endpoint", description="Returns a welcome message.")
@@ -56,8 +56,6 @@ def test_db_endpoint(db: Session = Depends(get_db)):
     return {"message": "This endpoint successfully accessed the database session."}
 
 # --- Test Exception Endpoint (for quick verification of handlers) ---
-# This endpoint is kept in main.py for easy testing of global handlers.
-# In a real app, you might remove or move this to a dedicated 'dev' router.
 @app.get("/test-error/{error_type}", summary="Test exception handler", description="Triggers different types of errors to test the global exception handler.")
 def test_error_endpoint(error_type: str):
     from fastapi import HTTPException, status
@@ -76,12 +74,3 @@ def test_error_endpoint(error_type: str):
             raise RequestValidationError(e.errors())
     else:
         return {"message": "Specify 'http', 'generic', or 'validation' to test errors."}
-
-# --- How to Run ---
-# IMPORTANT: You must run from the PARENT directory of 'Hive-server' (e.g., 'Hive-app/')
-# 1. Ensure your virtual environment is activated.
-# 2. Make sure your .env file is correctly configured inside 'Hive-server/'.
-# 3. From the 'Hive-app/' directory, run the FastAPI application using uvicorn:
-#    uvicorn Hive-server.main:app --reload
-#    OR, if you have fastapi-cli installed:
-#    fastapi dev Hive-server/main.py

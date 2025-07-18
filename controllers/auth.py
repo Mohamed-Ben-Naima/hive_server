@@ -32,7 +32,7 @@ def register_user_controller(
         logger.warning(f"Registration failed for {user_data.email} with HTTP error: {e.detail} (Status: {e.status_code})")
         raise e
     except Exception as e:
-        logger.exception(f"An unexpected error occurred in register_user_controller for {user_data.email}.") # logger.exception logs traceback
+        logger.exception(f"An unexpected error occurred in register_user_controller for {user_data.email}.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred during registration: {e}"
@@ -57,9 +57,8 @@ def login_for_access_token_controller(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # <--- NEW: Update last_login timestamp after successful authentication ---
+    # Update last_login timestamp after successful authentication
     user_service.update_user_last_login(user)
-    # --- END NEW ---
     
     # Ensure the user object has a profile and extract username
     # This assumes that for an authenticated user, a profile will always exist.
