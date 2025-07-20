@@ -19,7 +19,7 @@ Dedicated POST /auth/token endpoint for user authentication.
 
 Issues industry-standard JWT (JSON Web Tokens) for secure API access.
 
-Returns essential user details (ID, email, username, active status) directly with the token for client convenience.
+Returns essential user details (ID, email, username) directly with the token for client convenience.
 
 Updates last_login timestamp on successful login for auditing.
 
@@ -28,6 +28,22 @@ Current User Profile Retrieval:
 GET /users/me endpoint to fetch the detailed profile of the currently authenticated user.
 
 Leverages JWT validation and eager-loading of user profile data for efficiency.
+
+Update Current User Profile:
+
+PATCH /users/me/update endpoint allowing authenticated users to partially update their own profile details (e.g., first name, bio, trading style, social links).
+
+Uses a dedicated ProfileUpdate schema, ensuring only provided fields are modified, leaving others untouched.
+
+Includes server-side validation for username uniqueness during updates.
+
+Change Password (Authenticated User):
+
+POST /users/me/password endpoint enabling authenticated users to securely change their password.
+
+Requires the user to provide their current password for verification before setting a new one.
+
+Includes robust validation for the new password, ensuring complexity, confirmation matching, and that the new password is not identical to the current one.
 
 Layered Architecture:
 
@@ -70,14 +86,14 @@ uploads/: Placeholder for file uploads (e.g., avatars).
 
 📁 Project Structure
 .
-└── hive_server/              # Main backend application package (renamed from Hive-server)
+└── hive_server/              # Main backend application package
     ├── .env                  # Environment variables (DO NOT COMMIT!)
     ├── __init__.py           # Makes 'hive_server' a Python package
     ├── main.py               # FastAPI application entry point
     ├── controllers/
     │   ├── __init__.py       # Python package marker
     │   ├── auth.py           # Authentication-related controllers (login, register)
-    │   └── user.py           # User-related controllers (e.g., get current user)
+    │   └── user.py           # User-related controllers (get current user, update profile, change password)
     ├── models/
     │   ├── __init__.py       # Python package marker
     │   ├── base.py           # SQLAlchemy declarative base
@@ -85,14 +101,14 @@ uploads/: Placeholder for file uploads (e.g., avatars).
     ├── routers/
     │   ├── __init__.py       # Python package marker
     │   ├── auth.py           # Authentication API routes (/auth/register, /auth/token)
-    │   └── users.py          # User API routes (/users/me)
+    │   └── users.py          # User API routes (/users/me, /users/me/update, /users/me/password)
     ├── schemas/
     │   ├── __init__.py       # Python package marker
     │   ├── auth.py           # Pydantic schemas for authentication (Token, TokenData)
-    │   └── user.py           # Pydantic schemas for User/Profile data (UserCreate, UserResponse, ProfileResponse, UserWithProfileResponse, UserForTokenResponse)
+    │   └── user.py           # Pydantic schemas for User/Profile data (UserCreate, ProfileUpdate, PasswordChange, UserResponse, ProfileResponse, UserWithProfileResponse, UserForTokenResponse)
     ├── services/
     │   ├── __init__.py       # Python package marker
-    │   └── user.py           # Business logic for user operations
+    │   └── user.py           # Business logic for user operations (create, authenticate, update profile, change password)
     ├── tests/
     │   ├── __init__.py       # Python package marker
     │   └── test_auth.py      # Tests for authentication (registration, login)
@@ -129,18 +145,20 @@ HTTP Client (tests): httpx
 
 Testing: pytest
 
-Other: logging, os, re, datetime, typing, contextlib, traceback, sys.
+Other: logging, os, re, datetime, typing, contextlib, traceback, sys, python-multipart (for form data handling if needed, implicitly by FastAPI).
 
 📦 Requirements
-Add these to your requirements.txt file in the hive_server/ directory:
+Add these to your requirements.txt file in the root of your project (e.g., Hive-app/requirements.txt):
 
 fastapi
 uvicorn
-sqlalchemy
+SQLAlchemy
 psycopg2-binary
 python-dotenv
-pydantic[email] # Includes email-validator
-passlib[bcrypt]
+pydantic
+pydantic-settings
+passlib
+python-jose
 python-multipart
 httpx
 pytest
@@ -153,13 +171,12 @@ PostgreSQL database instance (local or cloud)
 
 1. Clone the Repository
 git clone <your-repo-url>
-# Navigate to the parent directory of 'hive_server', e.g., 'Hive-app/'
+# Navigate to the parent directory of 'hive_server', which is your project root (e.g., 'Hive-app/')
 cd Hive-app
 
 2. Create a Virtual Environment
-Navigate into the hive_server directory first, then create the virtual environment.
+It's recommended to create the virtual environment in the project root (Hive-app/).
 
-cd hive_server
 python -m venv .venv
 # On Windows
 .\.venv\Scripts\activate
@@ -167,6 +184,8 @@ python -m venv .venv
 source ./.venv/bin/activate
 
 3. Install Dependencies
+With your virtual environment activated, install the required packages:
+
 pip install -r requirements.txt
 
 4. Configure Environment Variables
@@ -192,29 +211,41 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 # CORS_METHODS=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 # CORS_HEADERS=["*"]
 
-Important: Replace placeholders (your_db_host_ip_or_connection_name, etc.) with your actual credentials.
-Never commit your .env file to version control.
+Important: Replace placeholders (your_database_name, your_db_username, etc.) with your actual credentials. Never commit your .env file to version control.
 
 5. Database Setup (PostgreSQL)
 Ensure your PostgreSQL database is running and accessible.
-If you have a SQL schema file (e.g., teanhive.sql), you can set up your database with:
+If you have an existing SQL schema (e.g., teanhive.sql), you can set up your database using your PostgreSQL client:
 
 psql -h your_db_host -p 5432 -U your_db_username -d your_database_name -f path/to/teanhive.sql
+
+Manual Schema Updates (Development Only):
+If you add new fields to your SQLAlchemy models (e.g., is_active to the User model, or last_jti), you will need to update your database schema. For development purposes without a migration tool (like Alembic), you can manually run SQL ALTER TABLE commands in your PostgreSQL client:
+
+-- Example: Adding 'is_active' to the users table
+ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Example: Adding 'last_jti' to the users table
+ALTER TABLE users ADD COLUMN last_jti VARCHAR(255) NULL;
+
+Warning: This manual approach is not recommended for production environments with existing data. For production, a proper database migration tool (like Alembic) should be used.
 
 ▶️ Running the Server
 Make sure your virtual environment is activated.
 
-Option A: From the parent directory of hive_server (e.g., Hive-app/)
-This is the recommended way to run when your application is a package.
+Option A: Using fastapi dev (Recommended for Development)
+This is the most convenient way to run your server during development, as it handles reloading and environment setup effectively.
 
-cd C:\Users\ASUS\Desktop\Hive\Hive-app
-uvicorn --app-dir . hive_server.main:app --reload
-
-Option B: From inside the hive_server directory (Recommended)
-This option works if you prefer to be directly in the application's root.
-
+# Navigate to the 'hive_server' directory
 cd C:\Users\ASUS\Desktop\Hive\Hive-app\hive_server
 fastapi dev main.py
+
+Option B: Using uvicorn (For Production or Specific Testing)
+If you need to run with uvicorn directly, ensure you are in the project's root directory (Hive-app/) for uvicorn to correctly locate your application package and environment files.
+
+# Navigate to the project root (e.g., 'Hive-app/')
+cd C:\Users\ASUS\Desktop\Hive\Hive-app
+uvicorn --app-dir . hive_server.main:app --reload
 
 The --reload flag will automatically restart the server when code changes are detected.
 
@@ -230,18 +261,18 @@ pytest hive_server/tests/
 All tests use an in-memory SQLite database for speed and isolation.
 
 🛣️ Next Steps & Future Enhancements
-Resolve Database Connection Issue: This is the most critical immediate next step to ensure all database-dependent functionalities work correctly.
+Database Migrations (Alembic): Integrate Alembic for managing database schema changes in a version-controlled and safe way, especially for production environments.
 
-User Profile Management: Develop endpoints for updating user profile details (PUT/PATCH /users/me).
+Refresh Tokens & Token Revocation: Enhance security and user experience by implementing refresh tokens and a token blacklist (e.g., using the last_jti field) to invalidate old tokens upon new logins or password changes.
 
-Password Change Functionality: Implement a secure way for authenticated users to change their password.
+Email Verification: Implement a flow to verify user email addresses, potentially using an is_active field on the User model to restrict access until verified.
 
-Database Migrations (Alembic): Integrate Alembic for managing database schema changes in a version-controlled way.
+Password Recovery (Forgot Password): Implement a secure flow for users to reset their password if they forget it (e.g., via email link).
+
+User Deactivation/Deletion: Provide functionality for users to deactivate or delete their accounts.
 
 Core Trading Functionality: Implement features like trade logging, performance analysis, challenges, and reports.
 
 Social Features: Develop endpoints for posts, comments, and likes.
 
 Shorts System: Build out the short video content features.
-
-Refresh Tokens & Token Revocation: Enhance security and user experience by implementing refresh tokens and a token blacklist.

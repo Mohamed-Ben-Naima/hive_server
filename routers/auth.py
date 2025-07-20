@@ -60,3 +60,40 @@ async def login_for_access_token( # Changed to async
     """
     # Explicitly call the controller and pass necessary arguments
     return auth_controller.login_for_access_token_controller(form_data=form_data, db=db)
+
+# <--- NEW: Endpoint for initiating password reset (Forgot Password) ---
+@router.post(
+    "/forgot-password",
+    response_model=dict, # Returns a generic success message for security
+    summary="Request password reset link",
+    description="Sends a password reset link to the user's email if an account exists. Always returns a success message for security reasons (to prevent email enumeration)."
+)
+async def forgot_password(
+    request_data: user_schema.ForgotPasswordRequest, # Expects email
+    db: Session = Depends(get_db)
+):
+    """
+    API endpoint to initiate the password reset process.
+    The client provides the user's email. A password reset link (containing a JWT token)
+    will be sent to the email address if an account exists.
+    """
+    # Delegate to the auth controller
+    return await auth_controller.forgot_password_controller(request_data=request_data, db=db)
+
+# <--- NEW: Endpoint for resetting password with token ---
+@router.post(
+    "/reset-password",
+    response_model=dict, # Returns a simple success message
+    summary="Reset password using token",
+    description="Resets the user's password using a valid password reset token received via email."
+)
+async def reset_password(
+    request_data: user_schema.ResetPasswordRequest, # Expects token, new_password, confirm_new_password
+    db: Session = Depends(get_db)
+):
+    """
+    API endpoint to complete the password reset process.
+    The client provides the password reset token and the new password.
+    """
+    # Delegate to the auth controller
+    return auth_controller.reset_password_controller(request_data=request_data, db=db)

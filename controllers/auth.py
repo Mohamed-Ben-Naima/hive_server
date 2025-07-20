@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
-import logging # <-- NEW: Import logging
+import logging 
 
 # Get logger instance for this module
 logger = logging.getLogger("tea_n_hive_logger.auth_controller") # Corrected logger name
@@ -97,3 +97,56 @@ def login_for_access_token_controller(
         token_type="bearer",
         user=user_for_token_response # <--- CHANGED: Use UserForTokenResponse
     )
+
+# <--- NEW: Controller for initiating password reset ---
+async def forgot_password_controller(
+    request_data: user_schema.ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+) -> dict: # Returns a simple success message for security
+    """
+    Controller function to handle password reset request (sending email with token).
+    """
+    logger.info(f"Received forgot password request for email: {request_data.email}")
+    user_service = UserService(db)
+    
+    # In a real app, base_url would come from config or request headers.
+    # For now, let's use a placeholder.
+    # When deployed, this should be your frontend's base URL.
+    base_url = "http://localhost:8000" # Placeholder for your frontend's base URL
+
+    try:
+        # Delegate to service. Service handles not revealing if email exists.
+        await user_service.initiate_password_reset(email=request_data.email, base_url=base_url)
+        logger.info(f"Forgot password process initiated for {request_data.email}. Message sent (or simulated).")
+        # Always return a generic success message to prevent email enumeration attacks.
+        return {"message": "If an account with that email exists, a password reset link has been sent."}
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred during forgot password request for {request_data.email}.")
+        # Still return a generic success message even on server-side error for security.
+        return {"message": "If an account with that email exists, a password reset link has been sent."}
+
+# <--- NEW: Controller for resetting password with token ---
+def reset_password_controller(
+    request_data: user_schema.ResetPasswordRequest,
+    db: Session = Depends(get_db)
+) -> dict: # Returns a simple success message
+    """
+    Controller function to handle password reset using a token.
+    """
+    logger.info("Received password reset request with token.")
+    user_service = UserService(db)
+
+    try:
+        # Call the UserService method to perform the password reset
+        user_service.reset_user_password(token=request_data.token, new_password=request_data.new_password)
+        
+        logger.info("Password successfully reset via token.")
+        return {"message": "Password has been reset successfully. You can now log in with your new password."}
+    except HTTPException: # Re-raise HTTPExceptions (e.g., for invalid/expired token, user not found)
+        raise
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred during password reset with token.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset password due to a server error: {e}"
+        )

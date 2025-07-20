@@ -11,6 +11,7 @@ logger = logging.getLogger("tea_n_hive_logger.user_service")
 from ..models import user as user_model
 from ..schemas import user as user_schema
 from ..utils import security
+from ..utils.email_sender import send_password_reset_email # <--- NEW: Import email sender
 
 class UserService:
     def __init__(self, db: Session):
@@ -161,7 +162,6 @@ class UserService:
                 detail=f"Failed to update profile due to a server error: {e}"
             )
         
-    # <--- NEW: Method to change user's password ---
     def change_password(self, user: user_model.User, password_data: user_schema.PasswordChange) -> user_model.User:
         """
         Changes the password for the given user after verifying the current password.
@@ -194,4 +194,93 @@ class UserService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to change password due to a server error: {e}"
+            )
+        
+# <--- NEW: Initiate Password Reset Method ---
+    async def initiate_password_reset(self, email: str, base_url: str) -> None:
+        """
+        Finds a user by email, generates a password reset token, and simulates sending an email.
+        """
+        logger.info(f"Initiating password reset for email: {email}")
+        user = self.get_user_by_email(email)
+
+        if not user:
+            # For security, do not reveal if the email exists or not.
+            # Just log and return a success message to the client regardless.
+            logger.warning(f"Password reset request for non-existent email: {email}.")
+            return # Return silently to prevent email enumeration
+
+        try:
+            # Generate the password reset JWT
+            reset_token = security.create_password_reset_token(user_id=user.user_id)
+            
+            # Construct the reset link (this assumes a frontend route like /reset-password?token=...)
+            reset_link = f"{base_url}/reset-password?token={reset_token}"
+            
+            # Simulate sending the email
+            email_sent = await send_password_reset_email(email_to=user.email, reset_link=reset_link)
+            
+            if not email_sent:
+                logger.error(f"Failed to send password reset email to {user.email}.")
+                # Optionally raise an HTTPException here if email sending is critical
+                # For now, we'll let it silently fail or be logged.
+            else:
+                logger.info(f"Password reset link simulated sent to {user.email}.")
+
+        except Exception as e:
+            logger.exception(f"An unexpected error occurred during password reset initiation for {email}.")
+            # Do not re-raise HTTPException here to prevent revealing user existence
+            # The client should always get a success message for security.
+
+# <--- NEW: Reset User Password Method (using token) ---
+    def reset_user_password(self, token: str, new_password: str) -> user_model.User:
+        """
+        Resets a user's password using a valid password reset token.
+        """
+        logger.info("Attempting to reset user password via token.")
+
+        # 1. Decode and validate the password reset token
+        payload = security.decode_password_reset_token(token)
+
+        if payload is None:
+            logger.warning("Invalid or expired password reset token provided.")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, # Use 400 for invalid token
+                detail="Invalid or expired password reset token."
+            )
+
+        user_id = payload.get("user_id")
+        if user_id is None:
+            logger.warning("Password reset token payload missing user_id.")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid password reset token payload."
+            )
+
+        user = self.get_user_by_id(user_id)
+        if not user:
+            logger.error(f"User with ID {user_id} not found for password reset token.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found for this token."
+            )
+        
+        # 2. Hash the new password
+        hashed_new_password = security.get_password_hash(new_password)
+
+        try:
+            # 3. Update the user's password hash
+            user.password_hash = hashed_new_password
+            self.db.add(user)
+            self.db.commit()
+            self.db.refresh(user)
+
+            logger.info(f"Password for user ID: {user.user_id}, Email: {user.email} successfully reset via token.")
+            return user
+        except Exception as e:
+            self.db.rollback()
+            logger.exception(f"Error resetting password for user ID: {user.user_id}. Rolling back transaction.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to reset password due to a server error: {e}"
             )

@@ -186,7 +186,6 @@ class ProfileUpdate(BaseModel):
             ]
         }
 
-# --- NEW SCHEMA FOR PASSWORD CHANGE ---
 class PasswordChange(BaseModel):
     current_password: str = Field(..., min_length=8, max_length=255, example="SecureP@ssw0rd1", description="User's current password.")
     new_password: str = Field(..., min_length=8, max_length=255, example="NewSecureP@ssw0rd2", description="User's new password.")
@@ -225,6 +224,54 @@ class PasswordChange(BaseModel):
                     "current_password": "SecureP@ssw0rd1",
                     "new_password": "NewSecureP@ssw0rd2",
                     "confirm_new_password": "NewSecureP@ssw0rd2"
+                }
+            ]
+        }
+        extra = "forbid" # Disallow extra fields in the request body
+
+# --- NEW SCHEMAS FOR PASSWORD RECOVERY ---
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., example="user@example.com", description="The email address associated with the account to reset.")
+
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "email": "forgot.user@example.com"
+                }
+            ]
+        }
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., description="The password reset token received via email.")
+    new_password: str = Field(..., min_length=8, max_length=255, example="VerySecureNewP@ss3", description="The new password for the account.")
+    confirm_new_password: str = Field(..., example="VerySecureNewP@ss3", description="Confirmation of the new password.")
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password_complexity(cls, value):
+        if not re.match(PASSWORD_REGEX, value):
+            raise ValueError(
+                "New password must be at least 8 characters long and include "
+                "at least one uppercase letter, one lowercase letter, one digit, and one special character."
+            )
+        return value
+
+    @field_validator('confirm_new_password')
+    @classmethod
+    def new_passwords_match(cls, v, values):
+        new_password = values.data.get('new_password') if hasattr(values, 'data') else values.get('new_password')
+        if new_password is not None and v != new_password:
+            raise ValueError('New passwords do not match.')
+        return v
+
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "new_password": "VerySecureNewP@ss3",
+                    "confirm_new_password": "VerySecureNewP@ss3"
                 }
             ]
         }

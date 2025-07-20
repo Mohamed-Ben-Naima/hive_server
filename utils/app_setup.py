@@ -47,6 +47,7 @@ DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", 5))
 
 CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", "*")
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(',') if origin.strip()] if CORS_ORIGINS_STR != "*" else ["*"]

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from ..models.user import User as UserModel # <--- CHANGED: Import as UserModel for consistency
 from ..schemas.auth import TokenData
 from ..utils.db import get_db
-from ..utils.app_setup import ACCESS_TOKEN_EXPIRE_MINUTES # <--- IMPORTANT: Rely solely on this import
+from ..utils.app_setup import ACCESS_TOKEN_EXPIRE_MINUTES, PASSWORD_RESET_TOKEN_EXPIRE_MINUTES # <--- IMPORTANT: Rely solely on this import
 
 # Get logger instance for this module
 logger = logging.getLogger("tea_n_hive_logger.security")
@@ -36,8 +36,6 @@ def get_password_hash(password: str) -> str:
 # --- JWT Configuration ---
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-
-# Removed: ACCESS_TOKEN_EXPIRE_MINUTES = 30 # <--- REMOVED: Now imported from app_setup
 
 # Define the OAuth2PasswordBearer scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
@@ -78,6 +76,43 @@ def decode_access_token(token: str) -> Optional[dict]:
     except JWTError as e:
         logger.warning(f"JWT decoding failed: {e}")
         return None
+    
+    # <--- NEW: Method to create password reset token ---
+def create_password_reset_token(user_id: int, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Creates a special JWT for password reset.
+    This token contains user_id and a 'purpose' claim.
+    """
+    to_encode = {"user_id": user_id, "purpose": "password_reset"}
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        # Use the global PASSWORD_RESET_TOKEN_EXPIRE_MINUTES loaded from .env
+        expire = datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    logger.debug(f"Password reset JWT created for user_id: {user_id}, expires at: {expire}")
+    return encoded_jwt
+# --- END NEW ---
+
+# <--- NEW: Password Reset Token Decoding ---
+def decode_password_reset_token(token: str) -> Optional[dict]:
+    """
+    Decodes and validates a password reset JWT.
+    Checks for 'password_reset' purpose claim.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("purpose") != "password_reset":
+            logger.warning("Attempted to decode password reset token but 'purpose' claim is incorrect.")
+            return None
+        logger.debug(f"Password reset JWT decoded successfully. Payload: {payload}")
+        return payload
+    except JWTError as e:
+        logger.warning(f"Password reset JWT decoding failed: {e}")
+        return None
+# --- END NEW ---
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)], # Added Annotated for consistency
