@@ -18,6 +18,14 @@ class User(Base):
     # One-to-one relationship with Profile
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
+    # <--- NEW: Relationship for Posts ---
+    # A User can have many Posts
+    posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
+    # Note: comments and likes relationships will be added later when we develop those models.
+    # comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
+    # likes = relationship("Like", back_populates="user", cascade="all, delete-orphan")
+    # --- END NEW ---
+    
     def __repr__(self):
         return f"<User(user_id={self.user_id}, email='{self.email}')>"
 
