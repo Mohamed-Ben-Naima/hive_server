@@ -33,7 +33,7 @@ License
 Contact
 
 1. About Tea & Hive
-The Tea & Hive Backend API serves as the robust foundation for a modern social media and trading community application. It is designed to be scalable, secure, and maintainable, providing core functionalities for user management, social interactions (posts, likes), and future expansion into trading challenges and educational content. Built with FastAPI and SQLAlchemy, it leverages best-in-class Python technologies for high performance and developer experience.
+The Tea & Hive Backend API serves as the robust foundation for a modern social media and trading community application. It is designed to be scalable, secure, and maintainable, providing core functionalities for user management, social interactions (posts, likes, comments), and future expansion into trading challenges and educational content. Built with FastAPI and SQLAlchemy, it leverages best-in-class Python technologies for high performance and developer experience.
 
 2. Features
 The current iteration of the Tea & Hive Backend API includes the following core functionalities:
@@ -62,6 +62,14 @@ Media File Uploads: Robust handling of image and video file uploads to the local
 
 Content Validation: Enforces rules like "TEXT posts must have text content and no media," and "IMAGE/VIDEO posts need at least text or media."
 
+Enhanced Post Response Data: When fetching posts, the API now includes:
+
+likes_count: The total number of likes a post has received.
+
+is_liked_by_current_user: A boolean indicating if the currently authenticated user has liked that specific post (returns false for unauthenticated users).
+
+comments_count: The total number of comments a post has received, efficiently calculated and included in the response.
+
 Post Likes:
 
 Like and Unlike Posts: Authenticated users can like and unlike posts.
@@ -72,11 +80,15 @@ Retrieve Likes for a Post: Get a paginated list of users who liked a specific po
 
 Retrieve Posts Liked by User: Get a paginated list of posts that a specific user has liked.
 
-Enhanced Post Response Data: When fetching posts, the API now includes:
+created_at Timestamp: Each like now includes a created_at timestamp, providing valuable auditability.
 
-likes_count: The total number of likes a post has received.
+Post Comments:
 
-is_liked_by_current_user: A boolean indicating if the currently authenticated user has liked that specific post (returns false for unauthenticated users).
+Full CRUD Operations: Create, retrieve (single, all for a post, paginated), update, and delete comments on posts.
+
+Ownership Checks: Ensures only the comment's author can update or delete their comment.
+
+User Information: Comment responses include details about the user who made the comment.
 
 Authentication & Authorization:
 
@@ -131,7 +143,8 @@ Installation
 Clone the repository:
 
 git clone https://github.com/Meeeeedd/hive_server.git
-cd hive_server 
+cd hive_server # Navigate to the hive_server directory
+
 Create and activate a Python virtual environment:
 
 python -m venv .venv
@@ -139,24 +152,27 @@ python -m venv .venv
 .\.venv\Scripts\activate
 # On macOS/Linux:
 source ./.venv/bin/activate
-Install dependencies:
-Create a requirements.txt file in your project root (Tea-N-Hive-Backend/) with the following content:
 
-fastapi
-uvicorn[standard]
-SQLAlchemy
-psycopg2-binary
-python-dotenv
-pydantic
-pydantic-settings
-passlib[bcrypt]
-python-jose[cryptography]
-python-multipart
-httpx
-pytest
+Install dependencies:
+Create a requirements.txt file in your project root (e.g., hive_server/) with the following content:
+
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+SQLAlchemy==2.0.30
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+pydantic==2.7.4
+pydantic-settings==2.3.4
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.9
+httpx==0.27.0
+pytest==8.2.2
+
 Then install:
 
 pip install -r requirements.txt
+
 Environment Variables
 Create a .env file in the hive_server/ directory (the same directory as main.py) with the following variables. Replace placeholder values with your actual credentials and settings.
 
@@ -190,19 +206,40 @@ Create the database and user as specified in your DATABASE_URL.
 
 Run the SQL schema script to create all necessary tables:
 
-# Assuming teanhive.sql is in your project root (Tea-N-Hive-Backend/)
+# Assuming teanhive.sql is in your project root (e.g., 'hive_server/')
 psql -U your_db_user -d your_db_name -h your_db_host -p your_db_port -f teanhive.sql
 
 Replace your_db_user, your_db_name, your_db_host, your_db_port with your actual database credentials.
 
+Manual Schema Updates (Development Only):
+If you add new fields or tables to your SQLAlchemy models, you will need to update your database schema. For development purposes without a migration tool (like Alembic), you can manually run SQL ALTER TABLE or CREATE TABLE commands in your PostgreSQL client.
+
+For post_likes table (if created_at was missing):
+
+ALTER TABLE post_likes
+ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+For post_comments table:
+
+CREATE TABLE "post_comments" (
+    "comment_id" SERIAL PRIMARY KEY,
+    "post_id" INT NOT NULL REFERENCES "posts"("post_id") ON DELETE CASCADE,
+    "user_id" INT NOT NULL REFERENCES "users"("user_id") ON DELETE CASCADE,
+    "text_content" TEXT NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+Warning: This manual approach is not recommended for production environments with existing data. For production, a proper database migration tool (like Alembic) should be used.
+
 Running the Application
 Make sure your virtual environment is activated.
 
-# Navigate to the project root (e.g., 'hive_server/')
-cd hive_server
+# Navigate to the hive_server directory
+cd C:\Users\ASUS\Desktop\Hive\Hive-app\hive_server
 
-# Run using fastapi
+# Run using fastapi dev
 fastapi dev main.py
+
 The API will be accessible at http://localhost:8000.
 
 5. API Documentation (Swagger UI)
@@ -221,37 +258,42 @@ your_root_directory/
 ├── teanhive.sql                # Database schema DDL
 └── hive_server/                # Main backend application package
     ├── __init__.py
-    ├── main.py                 # Main FastAPI application entry point
+    ├── main.py                 # FastAPI application entry point
     ├── models/                 # SQLAlchemy ORM models (database schema)
     │   ├── __init__.py
     │   ├── base.py             # SQLAlchemy declarative base
     │   ├── user.py             # User and Profile models
     │   ├── posts.py            # Post model
-    │   └── post_likes.py       # PostLike model (NEW)
+    │   ├── post_likes.py       # PostLike model
+    │   └── post_comments.py    # PostComment model (NEW)
     ├── schemas/                # Pydantic models (request/response data validation)
     │   ├── __init__.py
     │   ├── auth.py             # Authentication-related schemas
     │   ├── user.py             # User and Profile schemas
     │   ├── posts.py            # Post schemas (PostCreate, PostUpdate, PostResponse)
-    │   └── post_likes.py       # PostLike schemas (PostLikeCreate, PostLikeResponse) (NEW)
+    │   ├── post_likes.py       # PostLike schemas (PostLikeCreate, PostLikeResponse)
+    │   └── post_comments.py    # PostComment schemas (PostCommentCreate, PostCommentUpdate, PostCommentResponse) (NEW)
     ├── services/               # Business logic and database operations
     │   ├── __init__.py
     │   ├── auth.py             # Authentication service logic
     │   ├── user.py             # User service logic
     │   ├── posts.py            # Post service logic
-    │   └── post_likes.py       # PostLike service logic (NEW)
+    │   ├── post_likes.py       # PostLike service logic
+    │   └── post_comments.py    # PostComment service logic (NEW)
     ├── controllers/            # Orchestrates requests between routers and services
     │   ├── __init__.py
     │   ├── auth.py             # Auth controller functions
     │   ├── user.py             # User controller functions
-    │   ├── posts.py            # Post controller functions (NEW)
-    │   └── post_likes.py       # PostLike controller functions (NEW)
+    │   ├── posts.py            # Post controller functions
+    │   ├── post_likes.py       # PostLike controller functions
+    │   └── post_comments.py    # PostComment controller functions (NEW)
     ├── routers/                # API endpoint definitions (FastAPI APIRouters)
     │   ├── __init__.py
     │   ├── auth.py             # Authentication routes
     │   ├── users.py            # User routes
-    │   ├── posts.py            # Post routes (NEW)
-    │   └── post_likes.py       # PostLike routes (NEW)
+    │   ├── posts.py            # Post routes
+    │   ├── post_likes.py       # PostLike routes
+    │   └── post_comments.py    # PostComment routes (NEW)
     ├── tests/                  # Automated tests for server functionality
     │   ├── __init__.py
     │   └── test_auth.py        # Tests for authentication (registration, login)
@@ -261,7 +303,7 @@ your_root_directory/
         ├── __init__.py
         ├── app_setup.py        # App startup/shutdown, middleware, logging, global settings
         ├── db.py               # Database connection/session management
-        ├── file_manager.py     # Local file system operations (save/delete uploads) (NEW)
+        ├── file_manager.py     # Local file system operations (save/delete uploads)
         └── security.py         # Password hashing, JWT handling, authentication dependencies
 
 7. Best Practices & Design Principles
@@ -277,7 +319,7 @@ Pydantic for Data Integrity: Extensive use of Pydantic models ensures robust dat
 
 SQLAlchemy ORM: Utilizes SQLAlchemy for object-relational mapping, abstracting database interactions and leveraging its powerful features like relationship(), joinedload() for N+1 problem prevention, and UniqueConstraint for data integrity.
 
-Database Query Optimization: Aggregations (e.g., likes_count) and conditional checks (is_liked_by_current_user) are performed efficiently at the database level using SQLAlchemy's select, func.count(), subqueries, and CTEs, minimizing Python-side processing and data transfer.
+Database Query Optimization: Aggregations (e.g., likes_count, comments_count) and conditional checks (is_liked_by_current_user) are performed efficiently at the database level using SQLAlchemy's select, func.count(), subqueries, and CTEs, minimizing Python-side processing and data transfer.
 
 Asynchronous Programming: FastAPI's async/await is used for I/O-bound operations (like database calls and file uploads), ensuring non-blocking performance.
 
@@ -316,12 +358,12 @@ Write tests for your changes.
 Submit a pull request.
 
 10. License
-No Liscence yet shh… 🤫
+No License yet shh… 🤫
 
 11. Contact
 For any questions or inquiries, please contact:
 
-Hive Team:  Mohamed Ben Naima - Hachem Omri - Ghassen Chahdoura
+Hive Team: Mohamed Ben Naima - Hachem Omri - Ghassen Chahdoura
 
 Email: medbennaima2021@gmail.com
 
