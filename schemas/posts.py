@@ -95,9 +95,12 @@ class PostResponse(BaseModel):
 
     user: PostAuthorResponse
 
-    # --- NEW: Fields for likes count and user's like status ---
+    # Fields for likes count and user's like status
     likes_count: int = Field(0, description="Total number of likes for this post.")
     is_liked_by_current_user: bool = Field(False, description="True if the current authenticated user has liked this post.")
+    
+    # --- NEW: Field for comments count ---
+    comments_count: int = Field(0, description="Total number of comments for this post.")
     # --- END NEW ---
 
     @computed_field
@@ -125,8 +128,9 @@ class PostResponse(BaseModel):
                         "email": "trader@example.com",
                         "username": "ProTrader"
                     },
-                    "likes_count": 5, # Example value
-                    "is_liked_by_current_user": True # Example value
+                    "likes_count": 5,
+                    "is_liked_by_current_user": True,
+                    "comments_count": 3 # Example value
                 },
                 {
                     "post_id": 102,
@@ -140,8 +144,9 @@ class PostResponse(BaseModel):
                         "email": "analyst@example.com",
                         "username": "ChartMaster"
                     },
-                    "likes_count": 12, # Example value
-                    "is_liked_by_current_user": False # Example value
+                    "likes_count": 12,
+                    "is_liked_by_current_user": False,
+                    "comments_count": 7 # Example value
                 }
             ]
         }

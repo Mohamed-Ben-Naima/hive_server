@@ -5,9 +5,6 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .base import Base # Import Base from your existing base.py
 
-# No direct import of User model here to prevent potential circular import issues.
-# Relationships will use string literals, resolved by Base.registry.configure() in app_setup.py.
-
 class Post(Base):
     __tablename__ = "posts"
 
@@ -22,11 +19,14 @@ class Post(Base):
     # One-to-many relationship with User
     user = relationship("User", back_populates="posts")
 
-    # --- NEW: One-to-many relationship with PostLike ---
-    # back_populates="post" links to the 'post' relationship in the PostLike model.
-    # cascade="all, delete-orphan" ensures that if a post is deleted,
-    # all its associated likes are automatically deleted from the database.
+    # One-to-many relationship with PostLike
     post_likes = relationship("PostLike", back_populates="post", cascade="all, delete-orphan")
+
+    # --- NEW: One-to-many relationship with PostComment ---
+    # back_populates="post" links to the 'post' relationship in the PostComment model.
+    # cascade="all, delete-orphan" ensures that if a post is deleted,
+    # all its associated comments are automatically deleted from the database.
+    post_comments = relationship("PostComment", back_populates="post", cascade="all, delete-orphan")
     # --- END NEW ---
 
     def __repr__(self):

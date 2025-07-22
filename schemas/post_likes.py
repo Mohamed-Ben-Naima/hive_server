@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Optional
 
 # Import necessary schemas for nested responses
-# We need PostAuthorResponse to show who liked the post
 from .posts import PostAuthorResponse 
 
 # --- Request Schemas ---
@@ -33,9 +32,7 @@ class PostLikeResponse(BaseModel):
     like_id: int
     post_id: int
     user_id: int # Include user_id directly for clarity
-    # Note: 'created_at' is omitted here to match your SQL schema for post_likes,
-    # which does not have a created_at column. If you add it to SQL, add it here too.
-    # created_at: datetime
+    created_at: datetime # <--- RE-ADDED: created_at column
 
     # Nested user information for the user who performed the like
     user: PostAuthorResponse # Reusing PostAuthorResponse for consistency
@@ -48,11 +45,11 @@ class PostLikeResponse(BaseModel):
                 "like_id": 1,
                 "post_id": 123,
                 "user_id": 456,
+                "created_at": "2023-10-27T15:30:00Z", # <--- ADDED: Example for created_at
                 "user": {
                     "user_id": 456,
                     "email": "liker@example.com",
                     "username": "LikeMaster"
                 }
-                # "created_at": "2023-10-27T15:30:00Z" # If you add created_at to SQL
             }
         }

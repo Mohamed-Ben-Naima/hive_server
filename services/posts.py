@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, select, literal_column # <--- ADDED: func, select, literal_column for advanced queries
+from sqlalchemy import func, select, literal_column
 from fastapi import HTTPException, status, UploadFile
 import logging
 from typing import List, Optional
@@ -13,7 +13,8 @@ logger = logging.getLogger("tea_n_hive_logger.posts_service")
 
 from ..models import posts as posts_model
 from ..models import user as user_model
-from ..models import post_likes as post_likes_model # <--- ADDED: Import post_likes model
+from ..models import post_likes as post_likes_model
+from ..models import post_comments as post_comments_model # <--- NEW: Import post_comments model
 from ..schemas import posts as posts_schema
 
 class PostsService:
@@ -99,10 +100,10 @@ class PostsService:
                 detail=f"Failed to create post due to a server error: {e}"
             )
 
-    def get_post_by_id(self, post_id: int, current_user_id: Optional[int] = None) -> Optional[posts_model.Post]: # <--- MODIFIED: Add current_user_id
+    def get_post_by_id(self, post_id: int, current_user_id: Optional[int] = None) -> Optional[posts_model.Post]:
         """
         Retrieves a single post by its ID, with its author's user and profile eager-loaded,
-        and includes likes count and current user's like status.
+        and includes likes count, current user's like status, and comments count.
         """
         logger.debug(f"Attempting to retrieve post by ID: {post_id}.")
 
@@ -112,8 +113,6 @@ class PostsService:
             .scalar_subquery()
 
         # Subquery to check if current user liked the post
-        # Uses a CASE statement to return 1 if liked, 0 if not, then sums it (which will be 0 or 1)
-        # This is robust for when current_user_id is None or the user hasn't liked it.
         is_liked_subquery = select(
             func.count(post_likes_model.PostLike.like_id)
         ).where(
@@ -121,37 +120,44 @@ class PostsService:
             post_likes_model.PostLike.user_id == current_user_id # Filter by current user ID
         ).scalar_subquery()
 
+        # --- NEW: Subquery to count comments for the post ---
+        comments_count_subquery = select(func.count(post_comments_model.PostComment.comment_id))\
+            .where(post_comments_model.PostComment.post_id == posts_model.Post.post_id)\
+            .scalar_subquery()
+        # --- END NEW ---
+
         # Build the main query for the post
         stmt = select(
             posts_model.Post,
-            likes_count_subquery.label("likes_count"), # Label the subquery result
-            is_liked_subquery.label("is_liked_by_current_user") # Label the subquery result
+            likes_count_subquery.label("likes_count"),
+            is_liked_subquery.label("is_liked_by_current_user"),
+            comments_count_subquery.label("comments_count") # <--- NEW: Add comments count to select
         ).options(
-            joinedload(posts_model.Post.user).joinedload(user_model.User.profile) # Eager load user and profile
+            joinedload(posts_model.Post.user).joinedload(user_model.User.profile)
         ).filter(posts_model.Post.post_id == post_id)
 
         # Execute the query
-        result = self.db.execute(stmt).first() # Use .first() as we expect one row
+        result = self.db.execute(stmt).first()
 
         if not result:
             logger.warning(f"Post ID: {post_id} not found.")
             return None
         
-        # Unpack the result: the Post object and the two scalar values
-        post_orm_obj, likes_count, is_liked_by_current_user_int = result
+        # Unpack the result: Post object and the three scalar values
+        post_orm_obj, likes_count, is_liked_by_current_user_int, comments_count = result # <--- MODIFIED: Unpack comments_count
 
         # Manually attach the calculated values to the ORM object for Pydantic serialization
-        # Pydantic's from_attributes will then pick these up.
         post_orm_obj.likes_count = likes_count
-        post_orm_obj.is_liked_by_current_user = bool(is_liked_by_current_user_int) # Convert 0/1 to False/True
+        post_orm_obj.is_liked_by_current_user = bool(is_liked_by_current_user_int)
+        post_orm_obj.comments_count = comments_count # <--- NEW: Attach comments_count
 
-        logger.debug(f"Successfully retrieved post ID: {post_id} with likes count: {likes_count}, is_liked: {bool(is_liked_by_current_user_int)}.")
+        logger.debug(f"Successfully retrieved post ID: {post_id} with likes count: {likes_count}, is_liked: {bool(is_liked_by_current_user_int)}, comments count: {comments_count}.") # <--- MODIFIED: Log comments_count
         return post_orm_obj
 
-    def get_posts(self, skip: int = 0, limit: int = 10, current_user_id: Optional[int] = None) -> List[posts_model.Post]: # <--- MODIFIED: Add current_user_id
+    def get_posts(self, skip: int = 0, limit: int = 10, current_user_id: Optional[int] = None) -> List[posts_model.Post]:
         """
         Retrieves a paginated list of posts, with each post's author and profile eager-loaded,
-        and includes likes count and current user's like status.
+        and includes likes count, current user's like status, and comments count.
         """
         logger.debug(f"Attempting to retrieve posts (skip: {skip}, limit: {limit}).")
 
@@ -159,51 +165,61 @@ class PostsService:
         Post = posts_model.Post
         User = user_model.User
         PostLike = post_likes_model.PostLike
+        PostComment = post_comments_model.PostComment # <--- NEW: Alias for PostComment
 
         # Subquery for likes count
-        # Group by post_id to count likes per post
         likes_count_cte = select(
             PostLike.post_id,
             func.count(PostLike.like_id).label("likes_count")
         ).group_by(PostLike.post_id).cte("likes_count_cte")
 
         # Subquery for current user's like status
-        # This will only return rows for posts liked by the current user
         is_liked_cte = select(
             PostLike.post_id
         ).where(
             PostLike.user_id == current_user_id
         ).cte("is_liked_cte")
 
+        # --- NEW: Subquery for comments count ---
+        comments_count_cte = select(
+            PostComment.post_id,
+            func.count(PostComment.comment_id).label("comments_count")
+        ).group_by(PostComment.post_id).cte("comments_count_cte")
+        # --- END NEW ---
+
         # Build the main query
         stmt = select(
             Post,
-            func.coalesce(likes_count_cte.c.likes_count, 0).label("likes_count"), # Use coalesce to default count to 0 if no likes
-            (is_liked_cte.c.post_id.is_not(None)).label("is_liked_by_current_user") # Check if a row exists in is_liked_cte
+            func.coalesce(likes_count_cte.c.likes_count, 0).label("likes_count"),
+            (is_liked_cte.c.post_id.is_not(None)).label("is_liked_by_current_user"),
+            func.coalesce(comments_count_cte.c.comments_count, 0).label("comments_count") # <--- NEW: Add comments count to select
         ).options(
-            joinedload(Post.user).joinedload(User.profile) # Eager load user and profile
+            joinedload(Post.user).joinedload(User.profile)
         ).outerjoin(
-            likes_count_cte, Post.post_id == likes_count_cte.c.post_id # LEFT JOIN for likes count
+            likes_count_cte, Post.post_id == likes_count_cte.c.post_id
         ).outerjoin(
-            is_liked_cte, Post.post_id == is_liked_cte.c.post_id # LEFT JOIN for current user's like status
+            is_liked_cte, Post.post_id == is_liked_cte.c.post_id
+        ).outerjoin( # <--- NEW: Outer join for comments count
+            comments_count_cte, Post.post_id == comments_count_cte.c.post_id
         ).order_by(
-            Post.created_at.desc() # Order by creation date
+            Post.created_at.desc()
         ).offset(skip).limit(limit)
 
         # Execute the query
-        results = self.db.execute(stmt).all() # Use .all() for multiple rows
+        results = self.db.execute(stmt).all()
 
         posts_with_data = []
         for row in results:
-            # Unpack the result: Post object, likes_count, is_liked_by_current_user
-            post_orm_obj, likes_count, is_liked_by_current_user_bool = row
+            # Unpack the result: Post object, likes_count, is_liked_by_current_user, comments_count
+            post_orm_obj, likes_count, is_liked_by_current_user_bool, comments_count = row # <--- MODIFIED: Unpack comments_count
             
             # Manually attach the calculated values to the ORM object
             post_orm_obj.likes_count = likes_count
             post_orm_obj.is_liked_by_current_user = is_liked_by_current_user_bool
+            post_orm_obj.comments_count = comments_count # <--- NEW: Attach comments_count
             posts_with_data.append(post_orm_obj)
 
-        logger.debug(f"Successfully retrieved {len(posts_with_data)} posts with likes data.")
+        logger.debug(f"Successfully retrieved {len(posts_with_data)} posts with likes and comments data.") # <--- MODIFIED: Log comments data
         return posts_with_data
 
     async def update_post(self, post_id: int, user_id: int, post_data: posts_schema.PostUpdate, media_file: Optional[UploadFile]) -> posts_model.Post:
@@ -285,7 +301,7 @@ class PostsService:
             
             # Re-fetch the post with all necessary relationships eager-loaded for Pydantic response.
             # Pass current_user_id for correct likes count and status.
-            final_db_post = self.get_post_by_id(db_post.post_id, current_user_id=user_id) # <--- MODIFIED: Pass user_id
+            final_db_post = self.get_post_by_id(db_post.post_id, current_user_id=user_id)
             if not final_db_post:
                 logger.error(f"Failed to retrieve updated post ID: {db_post.post_id} after update.")
                 raise HTTPException(

@@ -1,10 +1,10 @@
 # hive_server/services/post_likes.py
 
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy.exc import IntegrityError # To catch unique constraint violations
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
 logger = logging.getLogger("tea_n_hive_logger.post_likes_service")
 
@@ -19,15 +19,15 @@ class PostLikesService:
 
     def like_post(self, user_id: int, post_id: int) -> post_likes_model.PostLike:
         """
-        Records a like for a post by a specific user.
-        Raises HTTPException if the post or user does not exist, or if the post is already liked by the user.
+        Records a like for a post by a user.
+        Raises HTTPException if the post or user does not exist, or if already liked.
         """
         logger.info(f"Attempting to like post ID: {post_id} by user ID: {user_id}.")
 
         # 1. Verify Post Existence
         post_exists = self.db.query(posts_model.Post).filter(posts_model.Post.post_id == post_id).first()
         if not post_exists:
-            logger.warning(f"Like failed: Post ID {post_id} not found.")
+            logger.warning(f"Like creation failed: Post ID {post_id} not found.")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Post not found."
@@ -36,20 +36,23 @@ class PostLikesService:
         # 2. Verify User Existence (though current_user from dependency usually ensures this)
         user_exists = self.db.query(user_model.User).filter(user_model.User.user_id == user_id).first()
         if not user_exists:
-            logger.warning(f"Like failed: User ID {user_id} not found.")
+            logger.warning(f"Like creation failed: User ID {user_id} not found.")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found."
             )
 
         # 3. Create the Like record
-        db_like = post_likes_model.PostLike(user_id=user_id, post_id=post_id)
+        db_like = post_likes_model.PostLike(
+            user_id=user_id,
+            post_id=post_id
+        )
         try:
             self.db.add(db_like)
             self.db.commit()
-            self.db.refresh(db_like) # Refresh to get like_id and any default values
+            self.db.refresh(db_like) # Refresh to get like_id and created_at
 
-            # Eager load user and profile for the response schema
+            # Eager load user and profile for the response schema, ensuring created_at is loaded
             final_db_like = self.db.query(post_likes_model.PostLike)\
                 .options(joinedload(post_likes_model.PostLike.user).joinedload(user_model.User.profile))\
                 .filter(post_likes_model.PostLike.like_id == db_like.like_id)\
@@ -62,13 +65,13 @@ class PostLikesService:
                     detail="Failed to retrieve like for response."
                 )
 
-            logger.info(f"Successfully liked post ID: {post_id} by user ID: {user_id}. Like ID: {final_db_like.like_id}")
+            logger.info(f"Successfully liked post ID: {post_id} by user ID: {user_id}. Like ID: {final_db_like.like_id}.")
             return final_db_like
         except IntegrityError:
-            self.db.rollback() # Rollback transaction on unique constraint violation
-            logger.warning(f"User ID: {user_id} already liked post ID: {post_id}.")
+            self.db.rollback()
+            logger.warning(f"User ID {user_id} already liked post ID {post_id}.")
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, # 409 Conflict for duplicate resource
+                status_code=status.HTTP_409_CONFLICT,
                 detail="You have already liked this post."
             )
         except Exception as e:
@@ -81,22 +84,19 @@ class PostLikesService:
 
     def unlike_post(self, user_id: int, post_id: int) -> None:
         """
-        Removes a like for a post by a specific user.
-        Raises HTTPException if the like does not exist or if the user is not the liker.
+        Removes a like from a post by a user.
+        Raises HTTPException if the like does not exist.
         """
         logger.info(f"Attempting to unlike post ID: {post_id} by user ID: {user_id}.")
-
-        # Find the specific like record
         db_like = self.db.query(post_likes_model.PostLike)\
-            .filter(post_likes_model.PostLike.post_id == post_id,
-                    post_likes_model.PostLike.user_id == user_id)\
+            .filter(post_likes_model.PostLike.user_id == user_id, post_likes_model.PostLike.post_id == post_id)\
             .first()
 
         if not db_like:
             logger.warning(f"Unlike failed: User ID {user_id} has not liked post ID {post_id}.")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="You have not liked this post."
+                detail="Like not found (user has not liked this post)."
             )
         
         try:
@@ -119,7 +119,7 @@ class PostLikesService:
         likes = self.db.query(post_likes_model.PostLike)\
             .options(joinedload(post_likes_model.PostLike.user).joinedload(user_model.User.profile))\
             .filter(post_likes_model.PostLike.post_id == post_id)\
-            .order_by(post_likes_model.PostLike.created_at.desc() if hasattr(post_likes_model.PostLike, 'created_at') else post_likes_model.PostLike.like_id.desc())\
+            .order_by(post_likes_model.PostLike.created_at.desc()) \
             .offset(skip)\
             .limit(limit)\
             .all()
@@ -129,14 +129,13 @@ class PostLikesService:
 
     def get_posts_liked_by_user(self, user_id: int, skip: int = 0, limit: int = 10) -> List[post_likes_model.PostLike]:
         """
-        Retrieves a paginated list of posts liked by a specific user, with post and liker's user/profile eager-loaded.
+        Retrieves a paginated list of posts liked by a specific user, with liker's user and profile eager-loaded.
         """
         logger.debug(f"Attempting to retrieve posts liked by user ID: {user_id} (skip: {skip}, limit: {limit}).")
         likes = self.db.query(post_likes_model.PostLike)\
-            .options(joinedload(post_likes_model.PostLike.post), # Eager load the Post object
-                     joinedload(post_likes_model.PostLike.user).joinedload(user_model.User.profile))\
+            .options(joinedload(post_likes_model.PostLike.user).joinedload(user_model.User.profile))\
             .filter(post_likes_model.PostLike.user_id == user_id)\
-            .order_by(post_likes_model.PostLike.created_at.desc() if hasattr(post_likes_model.PostLike, 'created_at') else post_likes_model.PostLike.like_id.desc())\
+            .order_by(post_likes_model.PostLike.created_at.desc()) \
             .offset(skip)\
             .limit(limit)\
             .all()
@@ -150,7 +149,6 @@ class PostLikesService:
         """
         logger.debug(f"Checking like status for user ID: {user_id} on post ID: {post_id}.")
         like = self.db.query(post_likes_model.PostLike)\
-            .filter(post_likes_model.PostLike.user_id == user_id,
-                    post_likes_model.PostLike.post_id == post_id)\
+            .filter(post_likes_model.PostLike.user_id == user_id, post_likes_model.PostLike.post_id == post_id)\
             .first()
         return like is not None

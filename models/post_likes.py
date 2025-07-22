@@ -11,10 +11,7 @@ class PostLike(Base):
     like_id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     post_id = Column(Integer, ForeignKey("posts.post_id", ondelete="CASCADE"), nullable=False)
-    # Note: The 'created_at' column is NOT in your 'post_likes' SQL schema.
-    # If you intend to track when a like was created, you would need to add it to your SQL schema.
-    # For now, I'm omitting it to match your provided SQL.
-    # created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False) # <--- THIS LINE MUST BE PRESENT!
 
     # Define unique constraint to prevent a user from liking the same post multiple times
     __table_args__ = (UniqueConstraint('post_id', 'user_id', name='_post_user_uc'),)

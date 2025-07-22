@@ -34,7 +34,7 @@ if os.getenv("DEBUG_MODE", "False").lower() == "true":
 
 # --- Application Settings (Centralized here) ---
 APP_NAME = "Tea & Hive Backend"
-APP_VERSION = os.getenv("APP_VERSION", "0.9.0")
+APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
@@ -50,9 +50,10 @@ CORS_HEADERS = os.getenv("CORS_HEADERS", "*").split(',')
 from .db import test_db_connection, engine
 from ..models.base import Base
 # --- CRITICAL: Import all your SQLAlchemy model files here to ensure they are loaded ---
-from ..models import user # Imports hive_server/models/user.py
-from ..models import posts # Imports hive_server/models/posts.py
-from ..models import post_likes # <--- NEW: Import the post_likes model file
+from ..models import user
+from ..models import posts
+from ..models import post_likes
+from ..models import post_comments # <--- NEW: Import the post_comments model file
 # --- END CRITICAL IMPORTS ---
 
 # --- Lifespan Context Manager ---
@@ -130,7 +131,6 @@ def setup_exception_handlers(app: FastAPI):
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
-        # Log the full traceback for unhandled exceptions
         logger.exception(f"Unhandled Exception caught for URL: {request.url}. Error: {exc}")
 
         return JSONResponse(
