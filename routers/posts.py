@@ -2,7 +2,8 @@
 
 from fastapi import APIRouter, Depends, status, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
+
 import logging
 
 logger = logging.getLogger("tea_n_hive_logger.posts_router")
@@ -10,7 +11,7 @@ logger = logging.getLogger("tea_n_hive_logger.posts_router")
 from ..controllers import posts as posts_controller
 from ..schemas import posts as posts_schema
 from ..utils.db import get_db
-from ..utils.security import get_current_user
+from ..utils.security import get_current_user, get_current_user_optional # <--- MODIFIED: Import get_current_user_optional
 from ..models import user as user_model
 
 router = APIRouter(
@@ -31,25 +32,19 @@ async def create_post(
     text_content: Optional[str] = Form(None, max_length=1000, description="Main text content of the post."),
     media_file: Optional[UploadFile] = File(None, description="Optional image or video file to upload."),
 
-    current_user: user_model.User = Depends(get_current_user),
+    current_user: user_model.User = Depends(get_current_user), # This still requires authentication
     db: Session = Depends(get_db)
 ):
     """
     API endpoint to create a new post.
     Accepts form-data for text content and an optional file.
     """
-    # --- CRITICAL FIX: Handle empty string for Optional[UploadFile] from form-data ---
-    # This catches cases where the client sends media_file="" (an empty string)
-    # instead of omitting the field or sending a proper file.
-    if isinstance(media_file, str) and not media_file: # Check if it's an empty string
+    if isinstance(media_file, str) and not media_file:
         media_file = None
-        logger.debug("Detected empty string for media_file, treating as None.")
-    # --- END CRITICAL FIX ---
-
-    # This existing check is still useful for cases where UploadFile is created but has no filename (e.g., some browser behaviors)
-    if media_file and not media_file.filename:
+        logger.debug("Router: Detected empty string for media_file, treating as None.")
+    elif media_file and not media_file.filename:
         media_file = None
-        logger.debug("Detected UploadFile with empty filename, treating as None.")
+        logger.debug("Router: Detected UploadFile with empty filename, treating as None.")
 
     post_create_data = posts_schema.PostCreate(
         post_type=post_type,
@@ -58,7 +53,7 @@ async def create_post(
 
     return await posts_controller.create_post_controller(
         post_data=post_create_data,
-        media_file=media_file, # Pass the (potentially None) UploadFile object
+        media_file=media_file,
         current_user=current_user,
         db=db
     )
@@ -67,20 +62,21 @@ async def create_post(
     "/",
     response_model=List[posts_schema.PostResponse],
     summary="Get a list of posts",
-    description="Retrieves a paginated list of all posts."
+    description="Retrieves a paginated list of all posts, including likes count and current user's like status if authenticated."
 )
 async def get_posts(
     skip: int = Query(0, ge=0, description="Number of items to skip (for pagination)."),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of items to return (for pagination)."),
+    current_user: Optional[user_model.User] = Depends(get_current_user_optional), # <--- MODIFIED: Use optional auth
     db: Session = Depends(get_db)
 ):
     """
     API endpoint to retrieve multiple posts.
-    Directly calls the controller function.
     """
     return posts_controller.get_posts_controller(
         skip=skip,
         limit=limit,
+        current_user=current_user, # <--- MODIFIED: Pass current_user
         db=db
     )
 
@@ -88,18 +84,19 @@ async def get_posts(
     "/{post_id}",
     response_model=posts_schema.PostResponse,
     summary="Get a single post by ID",
-    description="Retrieves the details of a specific post."
+    description="Retrieves the details of a specific post, including likes count and current user's like status if authenticated."
 )
 async def get_post(
     post_id: int,
+    current_user: Optional[user_model.User] = Depends(get_current_user_optional), # <--- MODIFIED: Use optional auth
     db: Session = Depends(get_db)
 ):
     """
     API endpoint to retrieve a single post.
-    Directly calls the controller function.
     """
     return posts_controller.get_post_controller(
         post_id=post_id,
+        current_user=current_user, # <--- MODIFIED: Pass current_user
         db=db
     )
 
@@ -117,7 +114,6 @@ async def update_post_put(
 ):
     """
     API endpoint to fully update a post.
-    Directly calls the controller function.
     """
     return await posts_controller.update_post_controller(
         post_id=post_id,
@@ -146,16 +142,12 @@ async def update_post_patch(
     API endpoint to partially update a post.
     Accepts form-data for text content and an optional file.
     """
-    # --- CRITICAL FIX: Handle empty string for Optional[UploadFile] from form-data ---
-    if isinstance(media_file, str) and not media_file: # Check if it's an empty string
+    if isinstance(media_file, str) and not media_file:
         media_file = None
-        logger.debug("Detected empty string for media_file, treating as None during PATCH.")
-    # --- END CRITICAL FIX ---
-
-    # This existing check is still useful for cases where UploadFile is created but has no filename
-    if media_file and not media_file.filename:
+        logger.debug("Router: Detected empty string for media_file, treating as None during PATCH.")
+    elif media_file and not media_file.filename:
         media_file = None
-        logger.debug("Detected UploadFile with empty filename, treating as None during PATCH.")
+        logger.debug("Router: Detected UploadFile with empty filename, treating as None during PATCH.")
 
     update_data = {}
     if post_type is not None:
@@ -168,7 +160,7 @@ async def update_post_patch(
     return await posts_controller.update_post_controller(
         post_id=post_id,
         post_data=post_update_data,
-        media_file=media_file, # Pass the (potentially None) UploadFile object
+        media_file=media_file,
         current_user=current_user,
         db=db
     )
@@ -176,7 +168,8 @@ async def update_post_patch(
 
 @router.delete(
     "/{post_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=Dict[str, str],
+    status_code=status.HTTP_200_OK,
     summary="Delete a post",
     description="Deletes a post by ID. Requires authentication and ownership."
 )

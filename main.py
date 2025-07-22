@@ -2,14 +2,14 @@
 
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
-from dotenv import load_dotenv # Keep load_dotenv here for initial env loading
-from fastapi.staticfiles import StaticFiles # <--- NEW: Import StaticFiles
-import os # <--- NEW: Import os for UPLOAD_DIRECTORY_PATH
+from dotenv import load_dotenv
+from fastapi.staticfiles import StaticFiles
+import os
 
 # Load environment variables at the very top of the main entry file
 load_dotenv()
 
-# Import all app setup utilities and settings from app_setup
+# Import all app setup utilities and settings from app_setup.
 from .utils.app_setup import (
     app_lifespan,
     setup_app_middleware,
@@ -25,12 +25,16 @@ from .utils.app_setup import (
     CORS_HEADERS
 )
 from .utils.db import get_db
+
+# Import all API routers.
 from .routers import auth as auth_router
 from .routers import users as users_router
-from .routers import posts as posts_router # <--- NEW: Import posts router
+from .routers import posts as posts_router
+from .routers import post_likes as post_likes_router # <--- NEW: Import the post_likes router
+
 from .schemas import user as user_schema # For test_error_endpoint
 
-# Initialize FastAPI application
+# Initialize FastAPI application.
 app = FastAPI(
     title=APP_NAME,
     description="API for Tea & Hive mobile application.",
@@ -47,15 +51,13 @@ setup_exception_handlers(app)
 # --- Include Routers ---
 app.include_router(auth_router.router)
 app.include_router(users_router.router)
-app.include_router(posts_router.router) # <--- NEW: Include posts router
+app.include_router(posts_router.router)
+app.include_router(post_likes_router.router) # <--- NEW: Include the post_likes router
 
 # --- Serve Static Files (Uploads) ---
-# This makes files in the UPLOAD_DIRECTORY accessible via /uploads/filename
-# Ensure UPLOAD_DIRECTORY_PATH is defined in your .env (e.g., UPLOAD_DIRECTORY_PATH=uploads)
-# and that the directory exists and has read permissions.
 upload_dir_path = os.getenv("UPLOAD_DIRECTORY_PATH", "uploads")
-app.mount("/uploads", StaticFiles(directory=upload_dir_path), name="uploads") # <--- NEW: Mount static files
-print(f"Mounted static files from '{upload_dir_path}' at '/uploads/'") # For debugging startup
+app.mount("/uploads", StaticFiles(directory=upload_dir_path), name="uploads")
+print(f"Mounted static files from '{upload_dir_path}' at '/uploads/'")
 
 # --- Root Endpoint ---
 @app.get("/", summary="Root endpoint", description="Returns a welcome message.")

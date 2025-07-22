@@ -1,278 +1,328 @@
-Tea & Hive Backend Server
-Welcome to the backend server for the Tea & Hive application!
-This project is built with FastAPI and provides a robust, scalable, and secure API for managing core functionalities like user authentication and profiles.
+Tea & Hive Backend API 🍯
+Table of Contents
+About Tea & Hive
 
-🌟 Key Features
-Robust User Registration:
+Features
 
-Secure account creation with email, unique username, and strong password.
+Technologies Used
 
-Comprehensive validation for email format, username uniqueness (no spaces, not empty), and password complexity.
+Getting Started
 
-Atomic creation of User and Profile records for data consistency.
+Prerequisites
 
-Clear success messages on registration.
+Installation
 
-Secure User Login & JWTs:
+Environment Variables
 
-Dedicated POST /auth/token endpoint for user authentication.
+Database Setup
 
-Issues industry-standard JWT (JSON Web Tokens) for secure API access.
+Running the Application
 
-Returns essential user details (ID, email, username) directly with the token for client convenience.
+API Documentation (Swagger UI)
 
-Updates last_login timestamp on successful login for auditing.
+Project Structure
 
-Current User Profile Retrieval:
+Best Practices & Design Principles
 
-GET /users/me endpoint to fetch the detailed profile of the currently authenticated user.
+Testing
 
-Leverages JWT validation and eager-loading of user profile data for efficiency.
+Contributing
 
-Update Current User Profile:
+License
 
-PATCH /users/me/update endpoint allowing authenticated users to partially update their own profile details (e.g., first name, bio, trading style, social links).
+Contact
 
-Uses a dedicated ProfileUpdate schema, ensuring only provided fields are modified, leaving others untouched.
+1. About Tea & Hive
+The Tea & Hive Backend API serves as the robust foundation for a modern social media and trading community application. It is designed to be scalable, secure, and maintainable, providing core functionalities for user management, social interactions (posts, likes), and future expansion into trading challenges and educational content. Built with FastAPI and SQLAlchemy, it leverages best-in-class Python technologies for high performance and developer experience.
 
-Includes server-side validation for username uniqueness during updates.
+2. Features
+The current iteration of the Tea & Hive Backend API includes the following core functionalities:
 
-Change Password (Authenticated User):
+User Management:
 
-POST /users/me/password endpoint enabling authenticated users to securely change their password.
+User registration with secure password hashing.
 
-Requires the user to provide their current password for verification before setting a new one.
+User authentication (login) with JWT (JSON Web Tokens).
 
-Includes robust validation for the new password, ensuring complexity, confirmation matching, and that the new password is not identical to the current one.
+Retrieval of user profiles.
 
-Layered Architecture:
+Password reset functionality.
 
-Clean separation into routers, controllers, services, models, schemas, and utils for maintainability, testability, and clear separation of concerns.
+Update user profile details (e.g., first name, bio, trading style, social links).
 
-Global Exception Handling:
+Change password for authenticated users.
 
-Consistent, user-friendly JSON error responses for validation errors, HTTP errors, and unexpected server errors.
+Post Management:
 
-Sophisticated Logging:
+Full CRUD Operations: Create, retrieve (single, all, paginated), update, and delete posts.
 
-Integrated Python logging for structured, configurable output, aiding in debugging and monitoring.
+Flexible Content Types: Support for TEXT, IMAGE, and VIDEO post types with dynamic content validation.
 
-Environment Variable Management:
+Media File Uploads: Robust handling of image and video file uploads to the local file system, with dynamic URL generation for client access.
 
-Secure handling of sensitive configuration using .env files (e.g., database credentials, JWT secret keys).
+Content Validation: Enforces rules like "TEXT posts must have text content and no media," and "IMAGE/VIDEO posts need at least text or media."
 
-Comprehensive Testing Setup:
+Post Likes:
 
-Initial setup for pytest and httpx with an in-memory SQLite database for fast, isolated tests.
+Like and Unlike Posts: Authenticated users can like and unlike posts.
 
-🏗️ Architecture Overview
-The backend follows a layered architecture for modularity and testability:
+Unique Liking: Enforces a unique constraint ensuring a user can like a post only once.
 
-routers/: Defines API endpoints and maps requests to appropriate controllers. (Handles request/response flow).
+Retrieve Likes for a Post: Get a paginated list of users who liked a specific post.
 
-controllers/: Orchestrates business logic by coordinating between services and preparing responses. (Contains the "what to do" logic).
+Retrieve Posts Liked by User: Get a paginated list of posts that a specific user has liked.
 
-services/: Encapsulates core business logic and interacts directly with the database via SQLAlchemy ORM. (Abstracts data access).
+Enhanced Post Response Data: When fetching posts, the API now includes:
 
-models/: SQLAlchemy ORM models defining the structure of database tables (e.g., User, Profile).
+likes_count: The total number of likes a post has received.
 
-schemas/: Pydantic models for request body validation, query parameters, and response serialization.
+is_liked_by_current_user: A boolean indicating if the currently authenticated user has liked that specific post (returns false for unauthenticated users).
 
-utils/: Helper functions, middleware, application setup, security utilities (JWT, password hashing), and database connection management.
+Authentication & Authorization:
 
-tests/: Automated tests for server functionality.
+JWT-based authentication for secure API access.
 
-uploads/: Placeholder for file uploads (e.g., avatars).
+Dependencies for required authentication (get_current_user) and optional authentication (get_current_user_optional) for public endpoints that can provide personalized data if a user is logged in.
 
-📁 Project Structure
-.
-└── hive_server/              # Main backend application package
-    ├── .env                  # Environment variables (DO NOT COMMIT!)
-    ├── __init__.py           # Makes 'hive_server' a Python package
-    ├── main.py               # FastAPI application entry point
-    ├── controllers/
-    │   ├── __init__.py       # Python package marker
-    │   ├── auth.py           # Authentication-related controllers (login, register)
-    │   └── user.py           # User-related controllers (get current user, update profile, change password)
-    ├── models/
-    │   ├── __init__.py       # Python package marker
-    │   ├── base.py           # SQLAlchemy declarative base
-    │   └── user.py           # User and Profile ORM models
-    ├── routers/
-    │   ├── __init__.py       # Python package marker
-    │   ├── auth.py           # Authentication API routes (/auth/register, /auth/token)
-    │   └── users.py          # User API routes (/users/me, /users/me/update, /users/me/password)
-    ├── schemas/
-    │   ├── __init__.py       # Python package marker
-    │   ├── auth.py           # Pydantic schemas for authentication (Token, TokenData)
-    │   └── user.py           # Pydantic schemas for User/Profile data (UserCreate, ProfileUpdate, PasswordChange, UserResponse, ProfileResponse, UserWithProfileResponse, UserForTokenResponse)
-    ├── services/
-    │   ├── __init__.py       # Python package marker
-    │   └── user.py           # Business logic for user operations (create, authenticate, update profile, change password)
-    ├── tests/
-    │   ├── __init__.py       # Python package marker
-    │   └── test_auth.py      # Tests for authentication (registration, login)
-    ├── uploads/
-    │   ├── __init__.py       # Python package marker
-    │   ├── avatars/
-    │   │   └── __init__.py   # Python package marker
-    │   └── temp/
-    │       └── __init__.py   # Python package marker
-    └── utils/
-        ├── __init__.py       # Python package marker
-        ├── app_setup.py      # App setup (lifespan, middleware, logging)
-        ├── db.py             # Database connection/session management
-        └── security.py       # Password hashing, JWT utilities
+Centralized Utilities:
 
-🛠️ Technologies Used
-Backend Framework: FastAPI
+Database connection management.
 
-ASGI Server: Uvicorn
+Centralized and configurable logging.
 
-Database: PostgreSQL (dev/prod), SQLite (testing)
+Global exception handling for consistent API error responses.
 
-ORM: SQLAlchemy
+Environment variable management for flexible configuration.
 
-Database Driver: psycopg2-binary
+3. Technologies Used
+Backend Framework: FastAPI (Python) - For building high-performance APIs.
 
-Data Validation: Pydantic
+ASGI Server: Uvicorn - Powers FastAPI applications.
 
-Password Hashing: Passlib (with bcrypt backend)
+Database: PostgreSQL - Robust, open-source relational database.
 
-Environment Variables: python-dotenv
+ORM (Object-Relational Mapper): SQLAlchemy - For interacting with the database using Python objects.
 
-HTTP Client (tests): httpx
+Data Validation & Serialization: Pydantic - For defining data schemas and automatic validation.
 
-Testing: pytest
+Password Hashing: Passlib - For secure password storage (using bcrypt).
 
-Other: logging, os, re, datetime, typing, contextlib, traceback, sys, python-multipart (for form data handling if needed, implicitly by FastAPI).
+JWT Handling: python-jose - For JSON Web Token creation and verification.
 
-📦 Requirements
-Add these to your requirements.txt file in the root of your project (e.g., Hive-app/requirements.txt):
+Environment Variables: python-dotenv - For loading configuration from .env files.
+
+File System Operations: Python's built-in os and pathlib.
+
+HTTP Client (for tests): httpx
+
+Testing Framework: pytest
+
+Other: python-multipart (for form data handling, implicitly by FastAPI).
+
+4. Getting Started
+Follow these steps to set up and run the Tea & Hive Backend API on your local machine.
+
+Prerequisites
+Python 3.11+
+
+PostgreSQL Database: Ensure you have a PostgreSQL server running and accessible.
+
+Installation
+Clone the repository:
+
+git clone https://github.com/Meeeeedd/hive_server.git
+cd hive_server 
+Create and activate a Python virtual environment:
+
+python -m venv .venv
+# On Windows:
+.\.venv\Scripts\activate
+# On macOS/Linux:
+source ./.venv/bin/activate
+Install dependencies:
+Create a requirements.txt file in your project root (Tea-N-Hive-Backend/) with the following content:
 
 fastapi
-uvicorn
+uvicorn[standard]
 SQLAlchemy
 psycopg2-binary
 python-dotenv
 pydantic
 pydantic-settings
-passlib
-python-jose
+passlib[bcrypt]
+python-jose[cryptography]
 python-multipart
 httpx
 pytest
-
-🚀 Setup and Installation
-Prerequisites
-Python 3.7+ (recommended: Python 3.9+)
-
-PostgreSQL database instance (local or cloud)
-
-1. Clone the Repository
-git clone <your-repo-url>
-# Navigate to the parent directory of 'hive_server', which is your project root (e.g., 'Hive-app/')
-cd Hive-app
-
-2. Create a Virtual Environment
-It's recommended to create the virtual environment in the project root (Hive-app/).
-
-python -m venv .venv
-# On Windows
-.\.venv\Scripts\activate
-# On macOS/Linux
-source ./.venv/bin/activate
-
-3. Install Dependencies
-With your virtual environment activated, install the required packages:
+Then install:
 
 pip install -r requirements.txt
-
-4. Configure Environment Variables
-Create a .env file in the hive_server/ directory (the same directory as main.py):
-
-# .env file (inside hive_server directory)
+Environment Variables
+Create a .env file in the hive_server/ directory (the same directory as main.py) with the following variables. Replace placeholder values with your actual credentials and settings.
 
 # Database Configuration
-DB_HOST=localhost            # e.g., localhost, 127.0.0.1, or a cloud connection string
-DB_NAME=your_database_name
-DB_USER=your_db_username
-DB_PASSWORD=your_db_password
-DB_PORT=5432
+DATABASE_URL="postgresql://user:password@host:port/database_name"
+# Example: DATABASE_URL="postgresql://teanhive_user:mysecretpassword@localhost:5432/teanhive_db"
 
-# Application Configuration
-DEBUG_MODE=True              # Set to False for production. Enables SQLAlchemy echo and debug logs.
-SECRET_KEY="a_very_long_and_random_secret_key_for_your_application_0123456789abcdef"
+# Application Settings
+SECRET_KEY="your-super-secret-key-that-is-at-least-32-chars-long-and-random-string"
 ALGORITHM="HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES=5
+APP_VERSION="1.0.0" # Or current version
+DEBUG_MODE="True" # Set to "False" for production. Enables SQLAlchemy echo and debug logs.
 
-# CORS Configuration (optional, if you want to override defaults from app_setup.py)
-# CORS_ORIGINS=["http://localhost:3000", "https://yourfrontend.com"]
-# CORS_METHODS=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-# CORS_HEADERS=["*"]
+# CORS Configuration (adjust for your frontend's origin)
+CORS_ORIGINS="http://localhost:3000,https://your-frontend-domain.com" # Comma-separated list of allowed origins or "*" for all
+CORS_METHODS="GET,POST,PUT,DELETE,PATCH,OPTIONS" # Allowed HTTP methods
+CORS_HEADERS="*" # Allowed headers
 
-Important: Replace placeholders (your_database_name, your_db_username, etc.) with your actual credentials. Never commit your .env file to version control.
+# File Uploads
+UPLOAD_DIRECTORY_PATH="uploads" # Directory where media files will be stored (relative to hive_server)
+BASE_URL="http://localhost:8000" # Base URL for your API, used for generating media links
 
-5. Database Setup (PostgreSQL)
-Ensure your PostgreSQL database is running and accessible.
-If you have an existing SQL schema (e.g., teanhive.sql), you can set up your database using your PostgreSQL client:
+Important: Replace placeholders (e.g., your_database_name, your_db_username, your-super-secret-key-that-is-at-least-32-chars-long-and-random-string) with your actual credentials. Never commit your .env file to version control.
 
-psql -h your_db_host -p 5432 -U your_db_username -d your_database_name -f path/to/teanhive.sql
+Database Setup
+Ensure your PostgreSQL server is running.
 
-Manual Schema Updates (Development Only):
-If you add new fields to your SQLAlchemy models (e.g., is_active to the User model, or last_jti), you will need to update your database schema. For development purposes without a migration tool (like Alembic), you can manually run SQL ALTER TABLE commands in your PostgreSQL client:
+Create the database and user as specified in your DATABASE_URL.
 
--- Example: Adding 'is_active' to the users table
-ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+Run the SQL schema script to create all necessary tables:
 
--- Example: Adding 'last_jti' to the users table
-ALTER TABLE users ADD COLUMN last_jti VARCHAR(255) NULL;
+# Assuming teanhive.sql is in your project root (Tea-N-Hive-Backend/)
+psql -U your_db_user -d your_db_name -h your_db_host -p your_db_port -f teanhive.sql
 
-Warning: This manual approach is not recommended for production environments with existing data. For production, a proper database migration tool (like Alembic) should be used.
+Replace your_db_user, your_db_name, your_db_host, your_db_port with your actual database credentials.
 
-▶️ Running the Server
+Running the Application
 Make sure your virtual environment is activated.
 
-Option A: Using fastapi dev (Recommended for Development)
-This is the most convenient way to run your server during development, as it handles reloading and environment setup effectively.
+# Navigate to the project root (e.g., 'hive_server/')
+cd hive_server
 
-# Navigate to the 'hive_server' directory
-cd C:\Users\ASUS\Desktop\Hive\Hive-app\hive_server
+# Run using fastapi
 fastapi dev main.py
+The API will be accessible at http://localhost:8000.
 
-Option B: Using uvicorn (For Production or Specific Testing)
-If you need to run with uvicorn directly, ensure you are in the project's root directory (Hive-app/) for uvicorn to correctly locate your application package and environment files.
+5. API Documentation (Swagger UI)
+After running the application, you can access the interactive API documentation (Swagger UI) at:
+http://localhost:8000/docs
 
-# Navigate to the project root (e.g., 'Hive-app/')
-cd C:\Users\ASUS\Desktop\Hive\Hive-app
-uvicorn --app-dir . hive_server.main:app --reload
+This interface allows you to explore all available endpoints, their parameters, expected responses, and even make direct API calls for testing.
 
-The --reload flag will automatically restart the server when code changes are detected.
+6. Project Structure
+The project follows a modular and layered architecture:
 
-Once the server is running, you can access the interactive API documentation (Swagger UI) at:
-http://127.0.0.1:8000/docs
+your_root_directory/
+├── .env                        # Environment variables (DO NOT COMMIT!)
+├── README.md                   # This file
+├── requirements.txt            # Python dependencies
+├── teanhive.sql                # Database schema DDL
+└── hive_server/                # Main backend application package
+    ├── __init__.py
+    ├── main.py                 # Main FastAPI application entry point
+    ├── models/                 # SQLAlchemy ORM models (database schema)
+    │   ├── __init__.py
+    │   ├── base.py             # SQLAlchemy declarative base
+    │   ├── user.py             # User and Profile models
+    │   ├── posts.py            # Post model
+    │   └── post_likes.py       # PostLike model (NEW)
+    ├── schemas/                # Pydantic models (request/response data validation)
+    │   ├── __init__.py
+    │   ├── auth.py             # Authentication-related schemas
+    │   ├── user.py             # User and Profile schemas
+    │   ├── posts.py            # Post schemas (PostCreate, PostUpdate, PostResponse)
+    │   └── post_likes.py       # PostLike schemas (PostLikeCreate, PostLikeResponse) (NEW)
+    ├── services/               # Business logic and database operations
+    │   ├── __init__.py
+    │   ├── auth.py             # Authentication service logic
+    │   ├── user.py             # User service logic
+    │   ├── posts.py            # Post service logic
+    │   └── post_likes.py       # PostLike service logic (NEW)
+    ├── controllers/            # Orchestrates requests between routers and services
+    │   ├── __init__.py
+    │   ├── auth.py             # Auth controller functions
+    │   ├── user.py             # User controller functions
+    │   ├── posts.py            # Post controller functions (NEW)
+    │   └── post_likes.py       # PostLike controller functions (NEW)
+    ├── routers/                # API endpoint definitions (FastAPI APIRouters)
+    │   ├── __init__.py
+    │   ├── auth.py             # Authentication routes
+    │   ├── users.py            # User routes
+    │   ├── posts.py            # Post routes (NEW)
+    │   └── post_likes.py       # PostLike routes (NEW)
+    ├── tests/                  # Automated tests for server functionality
+    │   ├── __init__.py
+    │   └── test_auth.py        # Tests for authentication (registration, login)
+    ├── uploads/                # Directory for uploaded media files (e.g., post images/videos)
+    │   └── .gitkeep            # Placeholder to keep directory in git
+    └── utils/                  # Utility functions and cross-cutting concerns
+        ├── __init__.py
+        ├── app_setup.py        # App startup/shutdown, middleware, logging, global settings
+        ├── db.py               # Database connection/session management
+        ├── file_manager.py     # Local file system operations (save/delete uploads) (NEW)
+        └── security.py         # Password hashing, JWT handling, authentication dependencies
 
-🧪 Running Tests
-Ensure your virtual environment is activated. You should be in the parent directory of hive_server (e.g., Hive-app/).
+7. Best Practices & Design Principles
+The Tea & Hive Backend API is built with a strong emphasis on modern software development best practices:
 
-cd C:\Users\ASUS\Desktop\Hive\Hive-app
-pytest hive_server/tests/
+Layered Architecture (Separation of Concerns): Each component (model, schema, service, controller, router, utility) has a single, well-defined responsibility. This enhances modularity, maintainability, and testability.
 
-All tests use an in-memory SQLite database for speed and isolation.
+Modularity: Features are implemented in dedicated files and directories, making the codebase easy to navigate and understand.
 
-🛣️ Next Steps & Future Enhancements
-Database Migrations (Alembic): Integrate Alembic for managing database schema changes in a version-controlled and safe way, especially for production environments.
+Dependency Injection: Database sessions (db: Session = Depends(get_db)) and authenticated user objects (current_user: User = Depends(get_current_user)) are injected, promoting loose coupling and testability.
 
-Refresh Tokens & Token Revocation: Enhance security and user experience by implementing refresh tokens and a token blacklist (e.g., using the last_jti field) to invalidate old tokens upon new logins or password changes.
+Pydantic for Data Integrity: Extensive use of Pydantic models ensures robust data validation for incoming requests and consistent serialization for outgoing responses. from_attributes=True enables seamless mapping from SQLAlchemy ORM objects.
 
-Email Verification: Implement a flow to verify user email addresses, potentially using an is_active field on the User model to restrict access until verified.
+SQLAlchemy ORM: Utilizes SQLAlchemy for object-relational mapping, abstracting database interactions and leveraging its powerful features like relationship(), joinedload() for N+1 problem prevention, and UniqueConstraint for data integrity.
 
-Password Recovery (Forgot Password): Implement a secure flow for users to reset their password if they forget it (e.g., via email link).
+Database Query Optimization: Aggregations (e.g., likes_count) and conditional checks (is_liked_by_current_user) are performed efficiently at the database level using SQLAlchemy's select, func.count(), subqueries, and CTEs, minimizing Python-side processing and data transfer.
 
-User Deactivation/Deletion: Provide functionality for users to deactivate or delete their accounts.
+Asynchronous Programming: FastAPI's async/await is used for I/O-bound operations (like database calls and file uploads), ensuring non-blocking performance.
 
-Core Trading Functionality: Implement features like trade logging, performance analysis, challenges, and reports.
+Robust Error Handling:
 
-Social Features: Develop endpoints for posts, comments, and likes.
+Global exception handlers catch RequestValidationError, HTTPException, and generic Exception, providing consistent and informative JSON error responses to clients.
 
-Shorts System: Build out the short video content features.
+Specific business logic errors (e.g., "Post not found," "Already liked") are mapped to appropriate HTTP status codes (e.g., 404, 409).
+
+Transactional Integrity: Database operations are wrapped in try...except blocks with db.rollback() to ensure atomicity and prevent data corruption. Orphaned file cleanup is integrated into the service layer.
+
+Authentication & Authorization: Secure JWT-based authentication is implemented, with clear distinctions between required and optional authentication for different endpoints.
+
+Configuration Management: All configurable parameters are externalized into .env files, allowing easy deployment across different environments without code changes.
+
+Logging: Centralized and configurable logging provides clear insights into application behavior, aiding debugging and monitoring.
+
+8. Testing
+(Placeholder for future testing instructions)
+
+Currently, testing involves manual verification via Swagger UI or Postman. As the project grows, comprehensive unit and integration tests will be implemented.
+
+9. Contributing
+(Placeholder for contribution guidelines)
+
+Contributions are welcome! If you'd like to contribute, please follow these steps:
+
+Fork the repository.
+
+Create a new branch for your feature or bug fix.
+
+Implement your changes following the existing code style and best practices.
+
+Write tests for your changes.
+
+Submit a pull request.
+
+10. License
+No Liscence yet shh… 🤫
+
+11. Contact
+For any questions or inquiries, please contact:
+
+Hive Team:  Mohamed Ben Naima - Hachem Omri - Ghassen Chahdoura
+
+Email: medbennaima2021@gmail.com
+
+GitHub: Meeeeedd (Mohamed Ben Naima)

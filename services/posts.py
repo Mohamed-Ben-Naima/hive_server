@@ -1,16 +1,19 @@
 # hive_server/services/posts.py
 
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, select, literal_column # <--- ADDED: func, select, literal_column for advanced queries
 from fastapi import HTTPException, status, UploadFile
-from typing import List, Optional
 import logging
+from typing import List, Optional
 
-from ..utils import file_manager # Import the centralized file_manager utility
+from ..utils import file_manager
 
 logger = logging.getLogger("tea_n_hive_logger.posts_service")
 
 from ..models import posts as posts_model
 from ..models import user as user_model
+from ..models import post_likes as post_likes_model # <--- ADDED: Import post_likes model
 from ..schemas import posts as posts_schema
 
 class PostsService:
@@ -24,7 +27,6 @@ class PostsService:
         """
         logger.info(f"Attempting to create a new post for user ID: {user_id}.")
         
-        # Verify user existence first.
         user_exists = self.db.query(user_model.User).filter(user_model.User.user_id == user_id).first()
         if not user_exists:
             logger.warning(f"Post creation failed: User ID {user_id} not found.")
@@ -35,11 +37,6 @@ class PostsService:
 
         media_filename_to_save = None
         
-        # --- Flexible Content Validation Logic (Create) ---
-        # Rule: A post must have AT LEAST text_content OR a media_file.
-        # Rule: TEXT posts must have text_content and NO media_file.
-        # Rule: IMAGE/VIDEO posts can have both, or just one of them.
-
         has_text_content = bool(post_data.text_content and post_data.text_content.strip())
         has_media_file_provided = media_file is not None
 
@@ -63,26 +60,24 @@ class PostsService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"{post_data.post_type} post type requires either text content or a media file."
                 )
-            # If media_file is provided and allowed by type, save it.
             if has_media_file_provided:
                 media_filename_to_save = await file_manager.save_upload_file(media_file)
-        # --- END Flexible Content Validation ---
 
         try:
             db_post = posts_model.Post(
                 user_id=user_id,
                 post_type=post_data.post_type,
                 text_content=post_data.text_content,
-                media_url=media_filename_to_save # Store only the filename
+                media_url=media_filename_to_save
             )
             self.db.add(db_post)
             self.db.commit()
-            self.db.refresh(db_post) # Refresh to get the post_id and created_at from DB
+            self.db.refresh(db_post)
 
-            # CRITICAL: Re-fetch the post with all necessary relationships eager-loaded for Pydantic.
-            # This ensures that 'db_post.user.profile' is correctly loaded for serialization.
-            final_db_post = self.get_post_by_id(db_post.post_id)
-            if not final_db_post: # This case should ideally not be hit if creation was successful
+            # Re-fetch the post with all necessary relationships eager-loaded for Pydantic.
+            # Pass current_user_id=None because this is a creation, not a retrieval for a specific user.
+            final_db_post = self.get_post_by_id(db_post.post_id, current_user_id=None)
+            if not final_db_post:
                 logger.error(f"Failed to retrieve newly created post ID: {db_post.post_id} after creation.")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -91,12 +86,11 @@ class PostsService:
 
             logger.info(f"Successfully created post ID: {final_db_post.post_id} for user ID: {user_id}.")
             return final_db_post
-        except HTTPException: # Re-raise HTTP exceptions from validation or user not found
+        except HTTPException:
             raise
         except Exception as e:
-            self.db.rollback() # Rollback DB transaction on error
+            self.db.rollback()
             logger.exception(f"Failed to create post for user ID: {user_id}. Rolling back transaction.")
-            # If a file was saved but DB transaction failed, delete the file to prevent orphans.
             if media_filename_to_save:
                 file_manager.delete_file(media_filename_to_save)
                 logger.info(f"Cleaned up orphaned file: {media_filename_to_save}")
@@ -105,45 +99,119 @@ class PostsService:
                 detail=f"Failed to create post due to a server error: {e}"
             )
 
-    def get_post_by_id(self, post_id: int) -> Optional[posts_model.Post]:
+    def get_post_by_id(self, post_id: int, current_user_id: Optional[int] = None) -> Optional[posts_model.Post]: # <--- MODIFIED: Add current_user_id
         """
-        Retrieves a single post by its ID, with its author's user and profile eager-loaded.
+        Retrieves a single post by its ID, with its author's user and profile eager-loaded,
+        and includes likes count and current user's like status.
         """
         logger.debug(f"Attempting to retrieve post by ID: {post_id}.")
-        post = self.db.query(posts_model.Post)\
-            .options(joinedload(posts_model.Post.user).joinedload(user_model.User.profile))\
-            .filter(posts_model.Post.post_id == post_id)\
-            .first()
-        
-        if not post:
+
+        # Subquery to count likes for the post
+        likes_count_subquery = select(func.count(post_likes_model.PostLike.like_id))\
+            .where(post_likes_model.PostLike.post_id == posts_model.Post.post_id)\
+            .scalar_subquery()
+
+        # Subquery to check if current user liked the post
+        # Uses a CASE statement to return 1 if liked, 0 if not, then sums it (which will be 0 or 1)
+        # This is robust for when current_user_id is None or the user hasn't liked it.
+        is_liked_subquery = select(
+            func.count(post_likes_model.PostLike.like_id)
+        ).where(
+            post_likes_model.PostLike.post_id == posts_model.Post.post_id,
+            post_likes_model.PostLike.user_id == current_user_id # Filter by current user ID
+        ).scalar_subquery()
+
+        # Build the main query for the post
+        stmt = select(
+            posts_model.Post,
+            likes_count_subquery.label("likes_count"), # Label the subquery result
+            is_liked_subquery.label("is_liked_by_current_user") # Label the subquery result
+        ).options(
+            joinedload(posts_model.Post.user).joinedload(user_model.User.profile) # Eager load user and profile
+        ).filter(posts_model.Post.post_id == post_id)
+
+        # Execute the query
+        result = self.db.execute(stmt).first() # Use .first() as we expect one row
+
+        if not result:
             logger.warning(f"Post ID: {post_id} not found.")
             return None
         
-        logger.debug(f"Successfully retrieved post ID: {post_id}.")
-        return post
+        # Unpack the result: the Post object and the two scalar values
+        post_orm_obj, likes_count, is_liked_by_current_user_int = result
 
-    def get_posts(self, skip: int = 0, limit: int = 10) -> List[posts_model.Post]:
+        # Manually attach the calculated values to the ORM object for Pydantic serialization
+        # Pydantic's from_attributes will then pick these up.
+        post_orm_obj.likes_count = likes_count
+        post_orm_obj.is_liked_by_current_user = bool(is_liked_by_current_user_int) # Convert 0/1 to False/True
+
+        logger.debug(f"Successfully retrieved post ID: {post_id} with likes count: {likes_count}, is_liked: {bool(is_liked_by_current_user_int)}.")
+        return post_orm_obj
+
+    def get_posts(self, skip: int = 0, limit: int = 10, current_user_id: Optional[int] = None) -> List[posts_model.Post]: # <--- MODIFIED: Add current_user_id
         """
-        Retrieves a paginated list of posts, with each post's author and profile eager-loaded.
+        Retrieves a paginated list of posts, with each post's author and profile eager-loaded,
+        and includes likes count and current user's like status.
         """
         logger.debug(f"Attempting to retrieve posts (skip: {skip}, limit: {limit}).")
-        posts = self.db.query(posts_model.Post)\
-            .options(joinedload(posts_model.Post.user).joinedload(user_model.User.profile))\
-            .order_by(posts_model.Post.created_at.desc())\
-            .offset(skip)\
-            .limit(limit)\
-            .all()
-        
-        logger.debug(f"Successfully retrieved {len(posts)} posts.")
-        return posts
-    
+
+        # Define aliases for tables to make joins clearer
+        Post = posts_model.Post
+        User = user_model.User
+        PostLike = post_likes_model.PostLike
+
+        # Subquery for likes count
+        # Group by post_id to count likes per post
+        likes_count_cte = select(
+            PostLike.post_id,
+            func.count(PostLike.like_id).label("likes_count")
+        ).group_by(PostLike.post_id).cte("likes_count_cte")
+
+        # Subquery for current user's like status
+        # This will only return rows for posts liked by the current user
+        is_liked_cte = select(
+            PostLike.post_id
+        ).where(
+            PostLike.user_id == current_user_id
+        ).cte("is_liked_cte")
+
+        # Build the main query
+        stmt = select(
+            Post,
+            func.coalesce(likes_count_cte.c.likes_count, 0).label("likes_count"), # Use coalesce to default count to 0 if no likes
+            (is_liked_cte.c.post_id.is_not(None)).label("is_liked_by_current_user") # Check if a row exists in is_liked_cte
+        ).options(
+            joinedload(Post.user).joinedload(User.profile) # Eager load user and profile
+        ).outerjoin(
+            likes_count_cte, Post.post_id == likes_count_cte.c.post_id # LEFT JOIN for likes count
+        ).outerjoin(
+            is_liked_cte, Post.post_id == is_liked_cte.c.post_id # LEFT JOIN for current user's like status
+        ).order_by(
+            Post.created_at.desc() # Order by creation date
+        ).offset(skip).limit(limit)
+
+        # Execute the query
+        results = self.db.execute(stmt).all() # Use .all() for multiple rows
+
+        posts_with_data = []
+        for row in results:
+            # Unpack the result: Post object, likes_count, is_liked_by_current_user
+            post_orm_obj, likes_count, is_liked_by_current_user_bool = row
+            
+            # Manually attach the calculated values to the ORM object
+            post_orm_obj.likes_count = likes_count
+            post_orm_obj.is_liked_by_current_user = is_liked_by_current_user_bool
+            posts_with_data.append(post_orm_obj)
+
+        logger.debug(f"Successfully retrieved {len(posts_with_data)} posts with likes data.")
+        return posts_with_data
+
     async def update_post(self, post_id: int, user_id: int, post_data: posts_schema.PostUpdate, media_file: Optional[UploadFile]) -> posts_model.Post:
         """
         Updates an existing post, handling optional file uploads and flexible content validation.
         Ensures the authenticated user is the owner.
         """
         logger.info(f"Attempting to update post ID: {post_id} by user ID: {user_id}.")
-        # Fetch the post with eager loading for current state and eventual response
         db_post = self.db.query(posts_model.Post)\
             .options(joinedload(posts_model.Post.user).joinedload(user_model.User.profile))\
             .filter(posts_model.Post.post_id == post_id)\
@@ -163,36 +231,29 @@ class PostsService:
                 detail="Not authorized to update this post."
             )
 
-        old_media_filename = db_post.media_url # Store current filename for potential deletion
-        new_media_filename = None # To track new file if uploaded
+        old_media_filename = db_post.media_url
+        new_media_filename = None
 
-        # Apply updates to db_post based on provided data from post_data schema
-        # Only update fields if they are explicitly provided in the update request
         if post_data.post_type is not None:
             db_post.post_type = post_data.post_type
-        if post_data.text_content is not None: # Allows clearing text_content by sending ""
+        if post_data.text_content is not None:
             db_post.text_content = post_data.text_content
 
-        # --- REFINED MEDIA HANDLING LOGIC (UPDATE) ---
-        if media_file: # Case 1: A new media file is provided
+        if media_file:
             new_media_filename = await file_manager.save_upload_file(media_file)
-            if old_media_filename: # Delete old file if it existed
+            if old_media_filename:
                 file_manager.delete_file(old_media_filename)
             db_post.media_url = new_media_filename
         elif post_data.post_type == "TEXT" and old_media_filename:
-            # Case 2: Post type is explicitly changed to TEXT, and there was existing media.
-            # This implies removal of media.
             file_manager.delete_file(old_media_filename)
             db_post.media_url = None
             logger.info(f"Removed media file {old_media_filename} for post {post_id} as post type changed to TEXT.")
-        # Case 3: No new media_file, post_type not changed to TEXT.
-        # The existing db_post.media_url remains as is.
-        # This covers scenarios where text_content is updated for a media post,
-        # or a text post's text_content is updated.
-        # --- END REFINED MEDIA HANDLING LOGIC ---
+        elif post_data.text_content is not None and not post_data.text_content.strip() and old_media_filename:
+            if db_post.post_type == "TEXT":
+                file_manager.delete_file(old_media_filename)
+                db_post.media_url = None
+                logger.info(f"Removed media file {old_media_filename} for post {post_id} as text content was cleared for TEXT post.")
 
-        # --- Flexible Content Validation Logic (Update - on final state of db_post) ---
-        # Re-validate the post's content state after applying all updates.
         current_has_text_content = bool(db_post.text_content and db_post.text_content.strip())
         current_has_media = bool(db_post.media_url)
 
@@ -203,7 +264,7 @@ class PostsService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="TEXT post type requires text content."
                 )
-            if current_has_media: # A TEXT post should not have media_url
+            if current_has_media:
                 logger.warning("Post update failed: TEXT post type does not allow media file after update.")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -216,15 +277,15 @@ class PostsService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"{db_post.post_type} post type requires either text content or a media file."
                 )
-        # --- END Flexible Content Validation ---
 
         try:
-            self.db.add(db_post) # Add the modified object to the session
-            self.db.commit() # Commit changes to the database
-            self.db.refresh(db_post) # Refresh the object to reflect latest DB state
-
+            self.db.add(db_post)
+            self.db.commit()
+            self.db.refresh(db_post)
+            
             # Re-fetch the post with all necessary relationships eager-loaded for Pydantic response.
-            final_db_post = self.get_post_by_id(db_post.post_id)
+            # Pass current_user_id for correct likes count and status.
+            final_db_post = self.get_post_by_id(db_post.post_id, current_user_id=user_id) # <--- MODIFIED: Pass user_id
             if not final_db_post:
                 logger.error(f"Failed to retrieve updated post ID: {db_post.post_id} after update.")
                 raise HTTPException(
@@ -235,12 +296,11 @@ class PostsService:
             logger.info(f"Successfully updated post ID: {post_id}.")
             return final_db_post
         except HTTPException:
-            raise # Re-raise HTTP exceptions from validation or authorization
+            raise
         except Exception as e:
-            self.db.rollback() # Rollback DB transaction on error
+            self.db.rollback()
             logger.exception(f"An unexpected error occurred while updating post ID: {post_id} for user ID: {user_id}.")
-            # If a new file was saved but DB transaction failed, delete the new file to prevent orphans.
-            if media_file and new_media_filename: # Check if new_media_filename was assigned
+            if media_file and new_media_filename:
                 file_manager.delete_file(new_media_filename)
                 logger.info(f"Cleaned up orphaned new file: {new_media_filename}")
             raise HTTPException(
@@ -270,17 +330,16 @@ class PostsService:
             )
 
         try:
-            # Use the centralized file_manager to delete the associated media file.
             if db_post.media_url:
                 file_manager.delete_file(db_post.media_url)
 
-            self.db.delete(db_post) # Delete the post record from the database.
-            self.db.commit() # Commit the deletion.
+            self.db.delete(db_post)
+            self.db.commit()
             logger.info(f"Successfully deleted post ID: {post_id}.")
         except HTTPException:
-            raise # Re-raise HTTP exceptions from authorization
+            raise
         except Exception as e:
-            self.db.rollback() # Rollback DB transaction on error
+            self.db.rollback()
             logger.exception(f"Failed to delete post ID: {post_id}. Rolling back transaction.")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

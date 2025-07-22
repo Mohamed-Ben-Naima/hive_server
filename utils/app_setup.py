@@ -13,44 +13,32 @@ import logging
 import sys
 
 # Load environment variables here as well, to ensure they are available
-# This ensures settings like DEBUG_MODE, UPLOAD_DIRECTORY_PATH are accessible.
 load_dotenv()
 
 # --- Configure Logger ---
-# Create a logger instance for the entire application.
 logger = logging.getLogger("tea_n_hive_logger")
-logger.setLevel(logging.INFO) # Default logging level
-
-# Create a console handler to output logs to stdout/stderr.
+logger.setLevel(logging.INFO)
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO) # Default handler level
-
-# Define a formatter for log messages.
+console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 console_handler.setFormatter(formatter)
-
-# Add the handler to the logger, preventing duplicate handlers on reload.
 if not logger.handlers:
     logger.addHandler(console_handler)
-
-# Adjust logging level based on DEBUG_MODE environment variable.
 if os.getenv("DEBUG_MODE", "False").lower() == "true":
     logger.setLevel(logging.DEBUG)
-    console_handler.setLevel(logging.DEBUG) # Ensure handler also logs debug messages
+    console_handler.setLevel(logging.DEBUG)
     logger.debug("DEBUG_MODE is ON. Logging level set to DEBUG.")
 
 
 # --- Application Settings (Centralized here) ---
-# Load application settings from environment variables with sensible defaults.
 APP_NAME = "Tea & Hive Backend"
-APP_VERSION = os.getenv("APP_VERSION", "0.7.0")
+APP_VERSION = os.getenv("APP_VERSION", "0.9.0")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
-# Corrected: Ensure consistent environment variable name for PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
 PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", 5))
 
 CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", "*")
@@ -62,10 +50,9 @@ CORS_HEADERS = os.getenv("CORS_HEADERS", "*").split(',')
 from .db import test_db_connection, engine
 from ..models.base import Base
 # --- CRITICAL: Import all your SQLAlchemy model files here to ensure they are loaded ---
-# This is essential for SQLAlchemy's declarative base to register all models
-# and their relationships before Base.registry.configure() is called.
 from ..models import user # Imports hive_server/models/user.py
 from ..models import posts # Imports hive_server/models/posts.py
+from ..models import post_likes # <--- NEW: Import the post_likes model file
 # --- END CRITICAL IMPORTS ---
 
 # --- Lifespan Context Manager ---
@@ -88,18 +75,15 @@ async def app_lifespan(app: FastAPI):
         # --- END CRITICAL STEP ---
 
         # Optional: Database Table Creation (for development only)
-        # Uncomment the following lines if you want FastAPI to automatically
-        # create tables based on your models when running in debug mode.
-        # This is generally NOT recommended for production environments.
         # if DEBUG_MODE:
         #     logger.info("Attempting to create database tables (development mode)...")
         #     Base.metadata.create_all(bind=engine)
         #     logger.info("Database tables ensured (development mode).")
     else:
         logger.critical("❌ Database connection FAILED on startup. Exiting application. ❌")
-        sys.exit(1) # Exit the application if DB connection fails
+        sys.exit(1)
 
-    yield # Application runs here
+    yield
 
     logger.info("Shutting down FastAPI application.")
 
@@ -147,7 +131,7 @@ def setup_exception_handlers(app: FastAPI):
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
         # Log the full traceback for unhandled exceptions
-        logger.exception(f"Unhandled Exception caught for URL: {request.url}. Error: {exc}") # logger.exception logs traceback automatically
+        logger.exception(f"Unhandled Exception caught for URL: {request.url}. Error: {exc}")
 
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

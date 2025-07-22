@@ -3,12 +3,12 @@
 from fastapi import Depends, HTTPException, status, Query, UploadFile
 from sqlalchemy.orm import Session
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 logger = logging.getLogger("tea_n_hive_logger.posts_controller")
 
 from ..utils.db import get_db
-from ..utils.security import get_current_user
+from ..utils.security import get_current_user, get_current_user_optional # <--- MODIFIED: Import get_current_user_optional
 from ..schemas import posts as posts_schema
 from ..schemas import user as user_schema
 from ..services.posts import PostsService
@@ -61,14 +61,20 @@ async def create_post_controller(
 
 def get_post_controller(
     post_id: int,
+    current_user: Optional[user_model.User] = Depends(get_current_user_optional), # <--- MODIFIED: Add optional user
     db: Session = Depends(get_db)
 ) -> posts_schema.PostResponse:
     """
     Controller to retrieve a single post by ID.
+    Passes optional current_user_id to the service for like status.
     """
     logger.info(f"Received request to retrieve post ID: {post_id}.")
     posts_service = PostsService(db)
-    db_post = posts_service.get_post_by_id(post_id)
+    
+    # Pass current_user.user_id if user is authenticated, otherwise None
+    current_user_id = current_user.user_id if current_user else None
+    
+    db_post = posts_service.get_post_by_id(post_id, current_user_id) # <--- MODIFIED: Pass current_user_id
     
     if not db_post:
         logger.warning(f"Post retrieval failed: Post ID {post_id} not found.")
@@ -85,14 +91,20 @@ def get_post_controller(
 def get_posts_controller(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    current_user: Optional[user_model.User] = Depends(get_current_user_optional), # <--- MODIFIED: Add optional user
     db: Session = Depends(get_db)
 ) -> List[posts_schema.PostResponse]:
     """
     Controller to retrieve a list of posts with pagination.
+    Passes optional current_user_id to the service for like status.
     """
     logger.info(f"Received request to retrieve posts (skip: {skip}, limit: {limit}).")
     posts_service = PostsService(db)
-    db_posts = posts_service.get_posts(skip=skip, limit=limit)
+    
+    # Pass current_user.user_id if user is authenticated, otherwise None
+    current_user_id = current_user.user_id if current_user else None
+
+    db_posts = posts_service.get_posts(skip=skip, limit=limit, current_user_id=current_user_id) # <--- MODIFIED: Pass current_user_id
     
     response_posts = [posts_schema.PostResponse.model_validate(post) for post in db_posts]
 
@@ -149,16 +161,18 @@ def delete_post_controller(
     post_id: int,
     current_user: user_model.User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> dict:
+) -> Dict[str, str]:
     """
     Controller to delete a post.
+    Delegates to PostsService for business logic.
+    Returns a success message upon completion.
     """
     logger.info(f"Received request to delete post ID: {post_id} by user ID: {current_user.user_id}.")
     posts_service = PostsService(db)
     try:
         posts_service.delete_post(post_id=post_id, user_id=current_user.user_id)
         logger.info(f"Post ID: {post_id} deleted successfully by user ID: {current_user.user_id}.")
-        return {"message": f"Post ID {post_id} deleted successfully."}
+        return {"message": f"Successfully deleted post ID {post_id}."}
     except HTTPException:
         raise
     except Exception as e:

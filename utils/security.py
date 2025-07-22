@@ -1,8 +1,8 @@
 # hive_server/utils/security.py
 
 # --- Standard Library Imports ---
-from datetime import datetime, timedelta
-from typing import Optional, Annotated # Add Annotated for consistency
+from datetime import datetime, timedelta, timezone # <--- ADDED: timezone for UTC consistency
+from typing import Optional, Annotated
 import os
 import logging
 
@@ -14,10 +14,10 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 # --- Internal Project Imports ---
-from ..models.user import User as UserModel # <--- CHANGED: Import as UserModel for consistency
+from ..models.user import User as UserModel
 from ..schemas.auth import TokenData
 from ..utils.db import get_db
-from ..utils.app_setup import ACCESS_TOKEN_EXPIRE_MINUTES, PASSWORD_RESET_TOKEN_EXPIRE_MINUTES # <--- IMPORTANT: Rely solely on this import
+from ..utils.app_setup import ACCESS_TOKEN_EXPIRE_MINUTES, PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
 
 # Get logger instance for this module
 logger = logging.getLogger("tea_n_hive_logger.security")
@@ -51,10 +51,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta # Use timezone.utc for consistency
     else:
-        # Use the global ACCESS_TOKEN_EXPIRE_MINUTES imported from app_setup
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES) 
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES) # Use timezone.utc for consistency
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -77,7 +76,6 @@ def decode_access_token(token: str) -> Optional[dict]:
         logger.warning(f"JWT decoding failed: {e}")
         return None
     
-    # <--- NEW: Method to create password reset token ---
 def create_password_reset_token(user_id: int, expires_delta: Optional[timedelta] = None) -> str:
     """
     Creates a special JWT for password reset.
@@ -85,18 +83,15 @@ def create_password_reset_token(user_id: int, expires_delta: Optional[timedelta]
     """
     to_encode = {"user_id": user_id, "purpose": "password_reset"}
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta # Use timezone.utc for consistency
     else:
-        # Use the global PASSWORD_RESET_TOKEN_EXPIRE_MINUTES loaded from .env
-        expire = datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     logger.debug(f"Password reset JWT created for user_id: {user_id}, expires at: {expire}")
     return encoded_jwt
-# --- END NEW ---
 
-# <--- NEW: Password Reset Token Decoding ---
 def decode_password_reset_token(token: str) -> Optional[dict]:
     """
     Decodes and validates a password reset JWT.
@@ -112,12 +107,11 @@ def decode_password_reset_token(token: str) -> Optional[dict]:
     except JWTError as e:
         logger.warning(f"Password reset JWT decoding failed: {e}")
         return None
-# --- END NEW ---
 
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)], # Added Annotated for consistency
+    token: Annotated[str, Depends(oauth2_scheme)],
     db: Session = Depends(get_db)
-) -> UserModel: # <--- CHANGED: Use UserModel for consistency
+) -> UserModel:
     """
     FastAPI dependency to get the current authenticated user from a JWT.
     Raises HTTPException if token is invalid or user not found.
@@ -146,8 +140,7 @@ async def get_current_user(
         logger.exception(f"Unexpected error during get_current_user: {e}")
         raise credentials_exception
 
-    # IMPORTANT: UserService must be imported here to avoid circular dependency
-    from ..services.user import UserService
+    from ..services.user import UserService # Imported here to avoid circular dependency
     
     user_service = UserService(db)
     user = user_service.get_user_by_id(user_id)
@@ -158,3 +151,48 @@ async def get_current_user(
 
     logger.debug(f"User {user.email} (ID: {user.user_id}) successfully authenticated via JWT.")
     return user
+
+# --- NEW: Optional Authentication Dependency ---
+async def get_current_user_optional(
+    token: Annotated[Optional[str], Depends(oauth2_scheme)], # Token is optional now
+    db: Session = Depends(get_db)
+) -> Optional[UserModel]:
+    """
+    FastAPI dependency to get the current authenticated user, or None if not authenticated.
+    Does NOT raise HTTPException 401 if token is missing or invalid.
+    """
+    if token is None:
+        logger.debug("Optional authentication: No token provided. Returning None.")
+        return None # No token provided, so no authenticated user
+
+    try:
+        payload = decode_access_token(token)
+        if payload is None:
+            logger.warning("Optional authentication: Token is invalid/expired. Returning None.")
+            return None # Token was present but invalid/expired
+
+        token_data = TokenData(**payload)
+        user_id = token_data.user_id
+        if user_id is None:
+            logger.warning("Optional authentication: Token payload missing user_id. Returning None.")
+            return None # Token was present but invalid (no user_id)
+
+    except JWTError as e:
+        logger.warning(f"Optional authentication: JWT decoding failed: {e}. Returning None.")
+        return None # Token was invalid
+    except Exception as e:
+        logger.exception(f"Optional authentication: Unexpected error during get_current_user_optional: {e}. Returning None.")
+        return None
+
+    from ..services.user import UserService # Imported here to avoid circular dependency
+    
+    user_service = UserService(db)
+    user = user_service.get_user_by_id(user_id)
+
+    if user is None:
+        logger.warning(f"Optional authentication: User ID {user_id} from token not found in DB. Returning None.")
+        return None # User from token not found in DB
+
+    logger.debug(f"Optional authentication: User {user.email} (ID: {user.user_id}) found.")
+    return user
+# --- END NEW ---

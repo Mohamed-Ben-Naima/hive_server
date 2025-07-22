@@ -18,13 +18,19 @@ class User(Base):
     # One-to-one relationship with Profile
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
-    # <--- NEW: Relationship for Posts ---
-    # A User can have many Posts
+    # One-to-many relationship with Posts
     posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
-    # Note: comments and likes relationships will be added later when we develop those models.
-    # comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
-    # likes = relationship("Like", back_populates="user", cascade="all, delete-orphan")
+
+    # --- NEW: One-to-many relationship with PostLike ---
+    # back_populates="user" links to the 'user' relationship in the PostLike model.
+    # cascade="all, delete-orphan" ensures that if a user is deleted,
+    # all their associated post likes are automatically deleted from the database.
+    post_likes = relationship("PostLike", back_populates="user", cascade="all, delete-orphan")
     # --- END NEW ---
+    
+    # Note: short_likes and post_comments relationships will be added later when we develop those models.
+    # comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
+    # short_likes = relationship("ShortLike", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<User(user_id={self.user_id}, email='{self.email}')>"

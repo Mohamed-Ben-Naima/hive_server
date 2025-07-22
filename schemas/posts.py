@@ -8,33 +8,28 @@ import logging
 
 logger = logging.getLogger("tea_n_hive_logger.posts_schemas")
 
-# --- NEW: Nested Schema for Profile Data within PostAuthorResponse ---
+# --- Nested Schema for Profile Data within PostAuthorResponse ---
 class ProfileForPostAuthor(BaseModel):
     username: str
 
     class Config:
-        from_attributes = True # Allows this nested schema to be built from SQLAlchemy Profile object
+        from_attributes = True
 
 # --- Specific User Response Schema for Post Author ---
 class PostAuthorResponse(BaseModel):
     user_id: int
     email: EmailStr = Field(..., example="author@example.com", description="Author's email address.")
     
-    # <--- MODIFIED: Now explicitly includes an optional 'profile' of type ProfileForPostAuthor ---
     profile: Optional[ProfileForPostAuthor] = None
 
     @computed_field
     @property
     def username(self) -> str:
-        """
-        Retrieves the username from the explicitly nested 'profile' field.
-        This relies on the 'profile' relationship being eager-loaded by the service.
-        """
         if self.profile and self.profile.username:
             return self.profile.username
         
         logger.warning(f"User ID {self.user_id} has no profile or username loaded for PostAuthorResponse. Defaulting to 'Unknown User'.")
-        return "Unknown User" # Fallback for robustness
+        return "Unknown User"
 
     class Config:
         from_attributes = True
@@ -100,6 +95,11 @@ class PostResponse(BaseModel):
 
     user: PostAuthorResponse
 
+    # --- NEW: Fields for likes count and user's like status ---
+    likes_count: int = Field(0, description="Total number of likes for this post.")
+    is_liked_by_current_user: bool = Field(False, description="True if the current authenticated user has liked this post.")
+    # --- END NEW ---
+
     @computed_field
     @property
     def media_url(self) -> Optional[HttpUrl]:
@@ -124,7 +124,9 @@ class PostResponse(BaseModel):
                         "user_id": 1,
                         "email": "trader@example.com",
                         "username": "ProTrader"
-                    }
+                    },
+                    "likes_count": 5, # Example value
+                    "is_liked_by_current_user": True # Example value
                 },
                 {
                     "post_id": 102,
@@ -137,7 +139,9 @@ class PostResponse(BaseModel):
                         "user_id": 2,
                         "email": "analyst@example.com",
                         "username": "ChartMaster"
-                    }
+                    },
+                    "likes_count": 12, # Example value
+                    "is_liked_by_current_user": False # Example value
                 }
             ]
         }
