@@ -31,7 +31,10 @@ from .routers import auth as auth_router
 from .routers import users as users_router
 from .routers import posts as posts_router
 from .routers import post_likes as post_likes_router
-from .routers import post_comments as post_comments_router # <--- NEW: Import the post_comments router
+from .routers import post_comments as post_comments_router
+from .routers import shorts as shorts_router # <--- NEW: Import the shorts router
+from .routers import short_likes as short_likes_router # <--- NEW: Import the short_likes router
+from .routers import short_comments as short_comments_router # <--- NEW: Import the short_comments router
 
 from .schemas import user as user_schema # For test_error_endpoint
 
@@ -54,7 +57,10 @@ app.include_router(auth_router.router)
 app.include_router(users_router.router)
 app.include_router(posts_router.router)
 app.include_router(post_likes_router.router)
-app.include_router(post_comments_router.router) # <--- NEW: Include the post_comments router
+app.include_router(post_comments_router.router)
+app.include_router(shorts_router.router) # <--- NEW: Include the shorts router
+app.include_router(short_likes_router.router) # <--- NEW: Include the short_likes router
+app.include_router(short_comments_router.router) # <--- NEW: Include the short_comments router
 
 # --- Serve Static Files (Uploads) ---
 upload_dir_path = os.getenv("UPLOAD_DIRECTORY_PATH", "uploads")

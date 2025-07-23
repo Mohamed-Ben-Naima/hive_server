@@ -24,15 +24,29 @@ class User(Base):
     # One-to-many relationship with PostLike
     post_likes = relationship("PostLike", back_populates="user", cascade="all, delete-orphan")
 
-    # --- NEW: One-to-many relationship with PostComment ---
-    # back_populates="user" links to the 'user' relationship in the PostComment model.
-    # cascade="all, delete-orphan" ensures that if a user is deleted,
-    # all their associated post comments are automatically deleted from the database.
+    # One-to-many relationship with PostComment
     post_comments = relationship("PostComment", back_populates="user", cascade="all, delete-orphan")
+
+    # --- NEW: One-to-many relationship with Short ---
+    # back_populates="user" links to the 'user' relationship in the Short model.
+    # cascade="all, delete-orphan" ensures that if a user is deleted,
+    # all their associated shorts are automatically deleted from the database.
+    shorts = relationship("Short", back_populates="user", cascade="all, delete-orphan")
     # --- END NEW ---
-    
-    # Note: short_likes relationships will be added later when we develop those models.
-    # short_likes = relationship("ShortLike", back_populates="user", cascade="all, delete-orphan")
+
+    # --- NEW: One-to-many relationship with ShortLike ---
+    # back_populates="user" links to the 'user' relationship in the ShortLike model.
+    # cascade="all, delete-orphan" ensures that if a user is deleted,
+    # all their associated short likes are automatically deleted from the database.
+    short_likes = relationship("ShortLike", back_populates="user", cascade="all, delete-orphan")
+    # --- END NEW ---
+
+    # --- NEW: One-to-many relationship with ShortComment ---
+    # back_populates="user" links to the 'user' relationship in the ShortComment model.
+    # cascade="all, delete-orphan" ensures that if a user is deleted,
+    # all their associated short comments are automatically deleted from the database.
+    short_comments = relationship("ShortComment", back_populates="user", cascade="all, delete-orphan")
+    # --- END NEW ---
     
     def __repr__(self):
         return f"<User(user_id={self.user_id}, email='{self.email}')>"

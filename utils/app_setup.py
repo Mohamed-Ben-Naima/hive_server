@@ -34,7 +34,7 @@ if os.getenv("DEBUG_MODE", "False").lower() == "true":
 
 # --- Application Settings (Centralized here) ---
 APP_NAME = "Tea & Hive Backend"
-APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+APP_VERSION = os.getenv("APP_VERSION", "1.1.0")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
@@ -53,7 +53,10 @@ from ..models.base import Base
 from ..models import user
 from ..models import posts
 from ..models import post_likes
-from ..models import post_comments # <--- NEW: Import the post_comments model file
+from ..models import post_comments
+from ..models import shorts # <--- NEW: Import the shorts model file
+from ..models import short_likes # <--- NEW: Import the short_likes model file
+from ..models import short_comments # <--- NEW: Import the short_comments model file
 # --- END CRITICAL IMPORTS ---
 
 # --- Lifespan Context Manager ---
