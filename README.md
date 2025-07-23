@@ -32,14 +32,15 @@ License
 
 Contact
 
+Future Improvements
+
 1. About Tea & Hive
-The Tea & Hive Backend API serves as the robust foundation for a modern social media and trading community application. It is designed to be scalable, secure, and maintainable, providing core functionalities for user management, social interactions (posts, likes, comments), and future expansion into trading challenges and educational content. Built with FastAPI and SQLAlchemy, it leverages best-in-class Python technologies for high performance and developer experience.
+The Tea & Hive Backend API serves as the robust foundation for a modern social media and trading community application. It is designed to be scalable, secure, and maintainable, providing core functionalities for user management, social interactions (posts, likes, comments, short videos), and future expansion into trading challenges and educational content. Built with FastAPI and SQLAlchemy, it leverages best-in-class Python technologies for high performance and developer experience.
 
 2. Features
 The current iteration of the Tea & Hive Backend API includes the following core functionalities:
 
 User Management:
-
 User registration with secure password hashing.
 
 User authentication (login) with JWT (JSON Web Tokens).
@@ -53,7 +54,6 @@ Update user profile details (e.g., first name, bio, trading style, social links)
 Change password for authenticated users.
 
 Post Management:
-
 Full CRUD Operations: Create, retrieve (single, all, paginated), update, and delete posts.
 
 Flexible Content Types: Support for TEXT, IMAGE, and VIDEO post types with dynamic content validation.
@@ -71,7 +71,6 @@ is_liked_by_current_user: A boolean indicating if the currently authenticated us
 comments_count: The total number of comments a post has received, efficiently calculated and included in the response.
 
 Post Likes:
-
 Like and Unlike Posts: Authenticated users can like and unlike posts.
 
 Unique Liking: Enforces a unique constraint ensuring a user can like a post only once.
@@ -83,21 +82,49 @@ Retrieve Posts Liked by User: Get a paginated list of posts that a specific user
 created_at Timestamp: Each like now includes a created_at timestamp, providing valuable auditability.
 
 Post Comments:
-
 Full CRUD Operations: Create, retrieve (single, all for a post, paginated), update, and delete comments on posts.
 
 Ownership Checks: Ensures only the comment's author can update or delete their comment.
 
 User Information: Comment responses include details about the user who made the comment.
 
-Authentication & Authorization:
+Shorts Management:
+Full CRUD Operations: Create, retrieve (single, all, paginated), update, and delete short video posts.
 
+Video File Uploads: Robust handling of video file uploads to the local file system, with dynamic URL generation for client access. Includes critical cleanup logic to prevent orphaned files on the file system if database transactions fail.
+
+Content Validation: Enforces rules for video file size and MIME types at the API gateway level.
+
+Enhanced Short Response Data: When fetching shorts, the API now includes:
+
+likes_count: The total number of likes a short has received.
+
+is_liked_by_current_user: A boolean indicating if the currently authenticated user has liked that specific short (returns false for unauthenticated users).
+
+comments_count: The total number of comments a short has received, efficiently calculated and included in the response.
+
+Short Likes:
+Like and Unlike Shorts: Authenticated users can like and unlike short videos.
+
+Unique Liking: Enforces a unique constraint ensuring a user can like a short only once.
+
+Retrieve Likes for a Short: Get a paginated list of users who liked a specific short.
+
+created_at Timestamp: Each like now includes a created_at timestamp, providing valuable auditability.
+
+Short Comments:
+Full CRUD Operations: Create, retrieve (single, all for a short, paginated), update, and delete comments on shorts.
+
+Ownership Checks: Ensures only the comment's author can update or delete their comment.
+
+User Information: Comment responses include details about the user who made the comment.
+
+Authentication & Authorization:
 JWT-based authentication for secure API access.
 
 Dependencies for required authentication (get_current_user) and optional authentication (get_current_user_optional) for public endpoints that can provide personalized data if a user is logged in.
 
 Centralized Utilities:
-
 Database connection management.
 
 Centralized and configurable logging.
@@ -219,6 +246,11 @@ For post_likes table (if created_at was missing):
 ALTER TABLE post_likes
 ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
+For short_likes table (if created_at was missing):
+
+ALTER TABLE short_likes
+ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
 For post_comments table:
 
 CREATE TABLE "post_comments" (
@@ -229,15 +261,47 @@ CREATE TABLE "post_comments" (
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-Warning: This manual approach is not recommended for production environments with existing data. For production, a proper database migration tool (like Alembic) should be used.
+For shorts table:
+
+CREATE TABLE "shorts" (
+    "short_id" SERIAL PRIMARY KEY,
+    "user_id" INT NOT NULL REFERENCES "users"("user_id") ON DELETE CASCADE,
+    "video_url" VARCHAR(2048) NOT NULL, -- Path to the video file
+    "description" VARCHAR(500),
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+For short_likes table:
+
+CREATE TABLE "short_likes" (
+    "like_id" SERIAL PRIMARY KEY,
+    "short_id" INT NOT NULL REFERENCES "shorts"("short_id") ON DELETE CASCADE,
+    "user_id" INT NOT NULL REFERENCES "users"("user_id") ON DELETE CASCADE,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE ("short_id", "user_id") -- Ensures a user can only like a short once
+);
+
+For short_comments table:
+
+CREATE TABLE "short_comments" (
+    "comment_id" SERIAL PRIMARY KEY,
+    "short_id" INT NOT NULL REFERENCES "shorts"("short_id") ON DELETE CASCADE,
+    "user_id" INT NOT NULL REFERENCES "users"("user_id") ON DELETE CASCADE,
+    "text_content" TEXT NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+Warning: This manual approach is not recommended for production environments with existing data. For production, a proper database migration tool (like Alembic) must be used.
 
 Running the Application
 Make sure your virtual environment is activated.
 
-# Navigate to the hive_server directory
+Navigate to the hive_server directory:
+
 cd C:\Users\ASUS\Desktop\Hive\Hive-app\hive_server
 
-# Run using fastapi dev
+Run using fastapi dev:
+
 fastapi dev main.py
 
 The API will be accessible at http://localhost:8000.
@@ -252,59 +316,74 @@ This interface allows you to explore all available endpoints, their parameters, 
 The project follows a modular and layered architecture:
 
 your_root_directory/
-├── .env                        # Environment variables (DO NOT COMMIT!)
-├── README.md                   # This file
-├── requirements.txt            # Python dependencies
-├── teanhive.sql                # Database schema DDL
-└── hive_server/                # Main backend application package
+├── .env                                # Environment variables (DO NOT COMMIT!)
+├── README.md                           # This file
+├── requirements.txt                    # Python dependencies
+├── teanhive.sql                        # Database schema DDL
+└── hive_server/                        # Main backend application package
     ├── __init__.py
-    ├── main.py                 # FastAPI application entry point
-    ├── models/                 # SQLAlchemy ORM models (database schema)
+    ├── main.py                         # FastAPI application entry point
+    ├── models/                         # SQLAlchemy ORM models (database schema)
     │   ├── __init__.py
-    │   ├── base.py             # SQLAlchemy declarative base
-    │   ├── user.py             # User and Profile models
-    │   ├── posts.py            # Post model
-    │   ├── post_likes.py       # PostLike model
-    │   └── post_comments.py    # PostComment model (NEW)
-    ├── schemas/                # Pydantic models (request/response data validation)
+    │   ├── base.py                     # SQLAlchemy declarative base
+    │   ├── user.py                     # User and Profile models
+    │   ├── posts.py                    # Post model
+    │   ├── post_likes.py               # PostLike model
+    │   ├── post_comments.py            # PostComment model
+    │   ├── shorts.py                   # Short model (NEW)
+    │   ├── short_likes.py              # ShortLike model (NEW)
+    │   └── short_comments.py           # ShortComment model (NEW)
+    ├── schemas/                        # Pydantic models (request/response data validation)
     │   ├── __init__.py
-    │   ├── auth.py             # Authentication-related schemas
-    │   ├── user.py             # User and Profile schemas
-    │   ├── posts.py            # Post schemas (PostCreate, PostUpdate, PostResponse)
-    │   ├── post_likes.py       # PostLike schemas (PostLikeCreate, PostLikeResponse)
-    │   └── post_comments.py    # PostComment schemas (PostCommentCreate, PostCommentUpdate, PostCommentResponse) (NEW)
-    ├── services/               # Business logic and database operations
+    │   ├── auth.py                     # Authentication-related schemas
+    │   ├── user.py                     # User and Profile schemas
+    │   ├── posts.py                    # Post schemas (PostCreate, PostUpdate, PostResponse)
+    │   ├── post_likes.py               # PostLike schemas (PostLikeCreate, PostLikeResponse)
+    │   ├── post_comments.py            # PostComment schemas (PostCommentCreate, PostCommentUpdate, PostCommentResponse)
+    │   ├── shorts.py                   # Short schemas (ShortCreate, ShortUpdate, ShortResponse) (NEW)
+    │   ├── short_likes.py              # ShortLike schemas (ShortLikeCreate, ShortLikeResponse) (NEW)
+    │   └── short_comments.py           # ShortComment schemas (ShortCommentCreate, ShortCommentUpdate, ShortCommentResponse) (NEW)
+    ├── services/                       # Business logic and database operations
     │   ├── __init__.py
-    │   ├── auth.py             # Authentication service logic
-    │   ├── user.py             # User service logic
-    │   ├── posts.py            # Post service logic
-    │   ├── post_likes.py       # PostLike service logic
-    │   └── post_comments.py    # PostComment service logic (NEW)
-    ├── controllers/            # Orchestrates requests between routers and services
+    │   ├── auth.py                     # Authentication service logic
+    │   ├── user.py                     # User service logic
+    │   ├── posts.py                    # Post service logic
+    │   ├── post_likes.py               # PostLike service logic
+    │   ├── post_comments.py            # PostComment service logic
+    │   ├── shorts.py                   # Short service logic (NEW)
+    │   ├── short_likes.py              # ShortLike service logic (NEW)
+    │   └── short_comments.py           # ShortComment service logic (NEW)
+    ├── controllers/                    # Orchestrates requests between routers and services
     │   ├── __init__.py
-    │   ├── auth.py             # Auth controller functions
-    │   ├── user.py             # User controller functions
-    │   ├── posts.py            # Post controller functions
-    │   ├── post_likes.py       # PostLike controller functions
-    │   └── post_comments.py    # PostComment controller functions (NEW)
-    ├── routers/                # API endpoint definitions (FastAPI APIRouters)
+    │   ├── auth.py                     # Auth controller functions
+    │   ├── user.py                     # User controller functions
+    │   ├── posts.py                    # Post controller functions
+    │   ├── post_likes.py               # PostLike controller functions
+    │   ├── post_comments.py            # PostComment controller functions
+    │   ├── shorts.py                   # Short controller functions (NEW)
+    │   ├── short_likes.py              # ShortLike controller functions (NEW)
+    │   └── short_comments.py           # ShortComment controller functions (NEW)
+    ├── routers/                        # API endpoint definitions (FastAPI APIRouters)
     │   ├── __init__.py
-    │   ├── auth.py             # Authentication routes
-    │   ├── users.py            # User routes
-    │   ├── posts.py            # Post routes
-    │   ├── post_likes.py       # PostLike routes
-    │   └── post_comments.py    # PostComment routes (NEW)
-    ├── tests/                  # Automated tests for server functionality
+    │   ├── auth.py                     # Authentication routes
+    │   ├── users.py                    # User routes
+    │   ├── posts.py                    # Post routes
+    │   ├── post_likes.py               # PostLike routes
+    │   ├── post_comments.py            # PostComment routes
+    │   ├── shorts.py                   # Short routes (NEW)
+    │   ├── short_likes.py              # ShortLike routes (NEW)
+    │   └── short_comments.py           # ShortComment routes (NEW)
+    ├── tests/                          # Automated tests for server functionality
     │   ├── __init__.py
-    │   └── test_auth.py        # Tests for authentication (registration, login)
-    ├── uploads/                # Directory for uploaded media files (e.g., post images/videos)
-    │   └── .gitkeep            # Placeholder to keep directory in git
-    └── utils/                  # Utility functions and cross-cutting concerns
+    │   └── test_auth.py                # Tests for authentication (registration, login)
+    ├── uploads/                        # Directory for uploaded media files (e.g., post images/videos, short videos)
+    │   └── .gitkeep                    # Placeholder to keep directory in git
+    └── utils/                          # Utility functions and cross-cutting concerns
         ├── __init__.py
-        ├── app_setup.py        # App startup/shutdown, middleware, logging, global settings
-        ├── db.py               # Database connection/session management
-        ├── file_manager.py     # Local file system operations (save/delete uploads)
-        └── security.py         # Password hashing, JWT handling, authentication dependencies
+        ├── app_setup.py                # App startup/shutdown, middleware, logging, global settings
+        ├── db.py                       # Database connection/session management
+        ├── file_manager.py             # Local file system operations (save/delete uploads)
+        └── security.py                 # Password hashing, JWT handling, authentication dependencies
 
 7. Best Practices & Design Principles
 The Tea & Hive Backend API is built with a strong emphasis on modern software development best practices:
@@ -368,3 +447,39 @@ Hive Team: Mohamed Ben Naima - Hachem Omri - Ghassen Chahdoura
 Email: medbennaima2021@gmail.com
 
 GitHub: Meeeeedd (Mohamed Ben Naima)
+
+12. Future Improvements
+While the core functionality is robust, there are several key areas for future enhancement to further improve the system's reliability, performance, and user experience. These are prioritized as follows:
+
+🚀 High Priority: Foundational & Immediate Impact
+Database Migrations with Alembic:
+
+Rationale: Manual database schema changes are prone to errors and difficult to replicate across different environments (development, staging, production). Alembic provides a robust, version-controlled system for managing database schema evolution. This is critical for reliable deployments and future development.
+
+Action: Implement Alembic setup, generate an initial migration reflecting the current schema, and create subsequent migrations for any ad-hoc changes made during development (e.g., adding created_at columns to short_likes and post_likes).
+
+⚡ Medium Priority: Performance & Scalability Enhancements
+Asynchronous Media Processing (for Video Uploads):
+
+Rationale: Currently, video file saving and processing occur synchronously within the API request/response cycle. For larger video files or a high volume of uploads, this can block the main FastAPI event loop, leading to increased latency and reduced API responsiveness.
+
+Action: Integrate a background task queue (e.g., Celery with Redis/RabbitMQ) to offload time-consuming video operations (saving to disk/cloud storage, transcoding, thumbnail generation) to background workers. The API would return an immediate "processing" status, and the client could be notified when the video is fully processed.
+
+Denormalized Counts with Database Triggers/Background Jobs:
+
+Rationale: While our current approach of using SQL subqueries and Common Table Expressions (CTEs) for likes_count and comments_count is efficient, for extremely high read volumes (millions of shorts/posts with billions of interactions), calculating these aggregates on every read can still become a performance bottleneck.
+
+Action: Introduce dedicated likes_count and comments_count columns directly into the shorts and posts tables. These counts would be maintained automatically either via database triggers (on INSERT/DELETE operations in the respective like/comment tables) or by a periodic background job. This would significantly accelerate read operations for these counts.
+
+✨ Low Priority: Advanced Features & User Experience
+Real-time Updates with WebSockets:
+
+Rationale: To enhance user engagement and provide a more dynamic experience, real-time updates for events like new likes, new comments, or new short video posts could be pushed directly to connected clients.
+
+Action: Implement WebSocket functionality using FastAPI's native WebSocket support or a dedicated library. This would allow for instant notifications without the need for clients to constantly poll the API.
+
+Video Streaming Optimization:
+
+Rationale: For efficient delivery of video content, especially to mobile devices or over varying network conditions, serving raw files directly from the backend might not be optimal.
+
+Action: Explore integrating with a Content Delivery Network (CDN) for global distribution, caching, and reduced latency. Additionally, consider implementing byte-range serving and adaptive bitrate streaming to provide a smoother and more resilient video playback experience.
