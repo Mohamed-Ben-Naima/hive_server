@@ -8,12 +8,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import traceback
 import os
-from dotenv import load_dotenv
+# Removed: from dotenv import load_dotenv # load_dotenv will be called only in main.py
 import logging
 import sys
 
-# Load environment variables here as well, to ensure they are available
-load_dotenv()
+# load_dotenv() is now called ONLY in main.py, ensuring it's loaded once at the entry point
 
 # --- Configure Logger ---
 logger = logging.getLogger("tea_n_hive_logger")
@@ -26,6 +25,7 @@ formatter = logging.Formatter(
 console_handler.setFormatter(formatter)
 if not logger.handlers:
     logger.addHandler(console_handler)
+# DEBUG_MODE check now relies on os.getenv after main.py's load_dotenv
 if os.getenv("DEBUG_MODE", "False").lower() == "true":
     logger.setLevel(logging.DEBUG)
     console_handler.setLevel(logging.DEBUG)
@@ -33,6 +33,7 @@ if os.getenv("DEBUG_MODE", "False").lower() == "true":
 
 
 # --- Application Settings (Centralized here) ---
+# These now correctly rely on environment variables set by main.py's load_dotenv
 APP_NAME = "Tea & Hive Backend"
 APP_VERSION = os.getenv("APP_VERSION", "1.1.0")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
@@ -46,17 +47,36 @@ CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(',') if orig
 CORS_METHODS = os.getenv("CORS_METHODS", "GET,POST,PUT,DELETE,OPTIONS").split(',')
 CORS_HEADERS = os.getenv("CORS_HEADERS", "*").split(',')
 
+# --- Database Connection String Construction ---
+# Load individual DB components - these will now be correctly loaded from .env
+DB_HOST = os.getenv("DB_HOST", "localhost") # Default to localhost if not set
+DB_PORT = os.getenv("DB_PORT", "5432")     # Default to 5432 if not set
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+
+# Construct the DATABASE_URL from individual components
+# This logic remains correct and robust
+if not all([DB_NAME, DB_USER, DB_PASSWORD]):
+    logger.critical("❌ Missing one or more database credentials (DB_NAME, DB_USER, DB_PASSWORD) in .env. Cannot construct DATABASE_URL.")
+    DATABASE_URL = None # Explicitly set to None if credentials are missing
+else:
+    DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    logger.debug(f"Constructed DATABASE_URL: postgresql://{DB_USER}:*****@{DB_HOST}:{DB_PORT}/{DB_NAME}") # Log safely
+
 # Import database utilities (relative to utils package)
-from .db import test_db_connection, engine
-from ..models.base import Base
+# Corrected import: only import test_db_connection and initialize_db_engine
+from .db import test_db_connection, initialize_db_engine # Removed 'engine' and 'DB_URL_FROM_DB_PY'
+
 # --- CRITICAL: Import all your SQLAlchemy model files here to ensure they are loaded ---
+from ..models.base import Base
 from ..models import user
 from ..models import posts
 from ..models import post_likes
 from ..models import post_comments
-from ..models import shorts # <--- NEW: Import the shorts model file
-from ..models import short_likes # <--- NEW: Import the short_likes model file
-from ..models import short_comments # <--- NEW: Import the short_comments model file
+from ..models import shorts
+from ..models import short_likes
+from ..models import short_comments
 # --- END CRITICAL IMPORTS ---
 
 # --- Lifespan Context Manager ---
@@ -69,11 +89,10 @@ async def app_lifespan(app: FastAPI):
     logger.info(f"🚀 Starting {APP_NAME} v{APP_VERSION} 🚀")
     logger.info("Attempting database connection test on server startup...")
 
-    if test_db_connection():
+    # Pass the constructed DATABASE_URL to the test_db_connection function
+    if test_db_connection(db_url=DATABASE_URL): # Pass the constructed URL
         logger.info("✅ Database connection successful on startup! ✅")
         # --- CRITICAL STEP: CONFIGURE SQLAlchemy MAPPERS ---
-        # This call resolves all string-based relationship definitions (e.g., "User", "Post")
-        # after all models have been imported and registered with the declarative base.
         Base.registry.configure()
         logger.info("✅ SQLAlchemy mappers configured successfully.")
         # --- END CRITICAL STEP ---
@@ -81,7 +100,9 @@ async def app_lifespan(app: FastAPI):
         # Optional: Database Table Creation (for development only)
         # if DEBUG_MODE:
         #     logger.info("Attempting to create database tables (development mode)...")
-        #     Base.metadata.create_all(bind=engine)
+        #     # Ensure you import get_engine from .db if you uncomment this
+        #     # from .db import get_engine
+        #     # Base.metadata.create_all(bind=get_engine())
         #     logger.info("Database tables ensured (development mode).")
     else:
         logger.critical("❌ Database connection FAILED on startup. Exiting application. ❌")
